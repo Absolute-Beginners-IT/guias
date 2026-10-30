@@ -28,6 +28,26 @@ describe('App', () => {
     }
   })
 
+  it('links back to the website that embeds the manual when it is built with VITE_HOME_URL', () => {
+    vi.stubEnv('VITE_HOME_URL', '../../')
+    try {
+      render(<App />)
+      expect(screen.getByRole('link', { name: '← Volver a la web' })).toHaveAttribute('href', '../../')
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('shows no link back when built on its own', () => {
+    vi.stubEnv('VITE_HOME_URL', '')
+    try {
+      render(<App />)
+      expect(screen.queryByRole('link', { name: '← Volver a la web' })).not.toBeInTheDocument()
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('shows the manual title and one tab per brand', () => {
     render(<App />)
 

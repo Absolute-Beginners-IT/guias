@@ -10,8 +10,13 @@ Todos los cambios relevantes de este proyecto se documentan aquí. El formato si
 
 - Aviso fijo en todas las páginas: el manual es un prototipo en desarrollo y no sustituye a la documentación oficial
   del fabricante ni a una prueba en laboratorio.
+- Enlace «← Volver a la web» en la cabecera cuando el manual se compila dentro de otra web (variable
+  `VITE_HOME_URL`). El archivo independiente no lo muestra.
 
 ### Cambiado
+
+- Colores y tipografía alineados con la web del proyecto: acento naranja (más oscuro en el tema claro para mantener el
+  contraste) y los mismos fondos, textos y bordes.
 
 - La guía de SNMP del Cisco Catalyst 1300 pasa de una comunidad v2c a SNMPv3: Engine ID, grupo con autenticación y
   cifrado, usuario con SHA y AES 128 (creado en la interfaz web, como indica Cisco) y una ACL de gestión que solo
