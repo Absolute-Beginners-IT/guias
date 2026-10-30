@@ -1,0 +1,19 @@
+id: ssh-access
+title: Activar el acceso por SSH y cerrar Telnet
+group: setup-access
+order: 5
+summary: Deja el switch administrable por SSH, que cifra la sesión, y desactiva Telnet, que no la cifra.
+explanation: >-
+  SSH y Telnet dan lo mismo: una consola remota del switch. La diferencia es que
+  Telnet envía todo en claro, incluidos el usuario y la contraseña, y cualquiera que
+  capture el tráfico los puede leer. SSH cifra la sesión. Lo correcto es administrar
+  solo por SSH y dejar Telnet apagado. Conviene además limitar desde qué redes se
+  puede entrar.
+risks:
+  - Desactivar el servicio por el que estás conectado corta tu sesión.
+  - Limitar el acceso a una red equivocada te deja fuera aunque el servicio esté activo.
+  - Activar SSH sin haber comprobado que puedes entrar por él, y cerrar Telnet a continuación, puede dejarte sin ninguna vía remota.
+prerequisites:
+  - El switch ya tiene IP de gestión y un usuario administrador con contraseña.
+  - Tener un cliente SSH en el equipo de administración.
+  - Tener acceso por consola por si el cambio corta el acceso remoto.

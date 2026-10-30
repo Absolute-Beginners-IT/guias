@@ -1,0 +1,75 @@
+id: aruba-aoscx
+vendor: HPE Aruba Networking
+name: Aruba CX 6100
+os: AOS-CX
+models:
+  - 6100 48G 4SFP+ con PoE (variante exacta por confirmar en la etiqueta)
+summary: >-
+  Switch de acceso de capa 2 con sistema operativo AOS-CX. Los puertos se nombran
+  con el formato miembro/slot/puerto, por ejemplo 1/1/5.
+cliModes:
+  - name: Manager
+    prompt: 'switch#'
+    enter: Es el modo al que se llega al iniciar sesión con un usuario administrador.
+    description: Consultas (show), guardado de la configuración y gestión de checkpoints.
+  - name: Configuración global
+    prompt: 'switch(config)#'
+    enter: config
+    description: Cambios que afectan a todo el switch, como crear VLANs.
+  - name: Contexto de VLAN
+    prompt: 'switch(config-vlan-20)#'
+    enter: vlan 20
+    description: Ajustes de una VLAN concreta, como su nombre.
+  - name: Contexto de interfaz
+    prompt: 'switch(config-if)#'
+    enter: interface 1/1/5
+    description: Ajustes de un puerto, como la VLAN de acceso o las VLAN permitidas en un trunk.
+configPersistence: >-
+  Los cambios se aplican al instante sobre la configuración en ejecución
+  (running-config), pero no sobreviven a un reinicio hasta que se copian a la
+  configuración de arranque (startup-config) con write memory.
+safetyNets:
+  - name: Checkpoint manual
+    description: >-
+      Copia con nombre de la configuración en ejecución. Se crea antes de un cambio y
+      permite volver a ese estado exacto. El nombre admite letras, números, guion y
+      guion bajo, hasta 32 caracteres, y no debe empezar por CPC.
+    commands:
+      - copy running-config checkpoint <nombre>
+      - show checkpoint
+      - checkpoint rollback <nombre>
+  - name: Modo checkpoint auto
+    description: >-
+      Abre una ventana de 1 a 60 minutos. Si no se confirma antes de que venza, el
+      switch restaura solo la configuración anterior. Es la protección indicada para
+      cambios que pueden dejarte sin acceso de gestión.
+    commands:
+      - checkpoint auto <minutos>
+      - checkpoint auto confirm
+  - name: Checkpoints generados por el sistema
+    description: >-
+      El switch crea checkpoints por su cuenta cuando pasan 300 segundos sin nuevos
+      cambios de configuración. Se llaman CPC seguido de fecha y hora, y se conservan
+      como máximo 32.
+    commands:
+      - show checkpoint
+  - name: Volver a la configuración de arranque
+    description: >-
+      Aplica la startup-config sobre la configuración en ejecución. Descarta todo lo
+      que no se haya guardado con write memory.
+    commands:
+      - checkpoint rollback startup-config
+sources:
+  - title: AOS-CX 10.15 Fundamentals Guide (4100i, 6000, 6100) — checkpoint rollback
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/Chk_cmds/che-rol.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — copy running-config a checkpoint
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/Chk_cmds/cop-run-con-st-con-che-che-nam.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — checkpoint auto
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/Chk_cmds/che-aut.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — checkpoints generados por el sistema
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/sys-gen-che.htm
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: AOS-CX 10.15
+  notes: Contrastado con la documentación oficial; pendiente de probar en un 6100 real.

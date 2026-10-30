@@ -1,0 +1,56 @@
+platform: mikrotik-routeros
+task: ntp-client
+summary: >-
+  Activa el cliente NTP de un MikroTik con RouterOS 7, que viene desactivado de
+  fábrica, y le añade el servidor de tiempo de la empresa.
+risk:
+  level: low
+  reason: Sincronizar la hora no afecta al tráfico ni al acceso de gestión.
+params:
+  - id: ntpServer
+    label: Servidor de tiempo
+    type: text
+    example: 192.168.10.5
+    pattern: '^[A-Za-z0-9.-]{1,253}$'
+    patternHint: Una IP o un nombre de equipo, sin espacios.
+    help: Si usas un nombre, el equipo necesita tener configurado un servidor DNS en /ip dns.
+preflight:
+  - text: Mira el estado actual del cliente NTP.
+    command: /system ntp client print
+steps:
+  - title: Añadir el servidor de tiempo
+    commands:
+      - /system ntp client servers add address={{ntpServer}}
+    explanation: >-
+      Añade {{ntpServer}} a la lista de servidores del cliente. Cada servidor queda
+      activado y con iburst por defecto.
+  - title: Activar el cliente NTP
+    commands:
+      - /system ntp client set enabled=yes
+    explanation: Activa el cliente NTP, que de fábrica está desactivado.
+verification:
+  - command: /system ntp client print
+    expect: >-
+      El estado (status) pasa a synchronized y aparece {{ntpServer}} como servidor
+      sincronizado. Puede tardar unos minutos; mientras tanto puede decir waiting.
+rollback:
+  summary: Desactiva el cliente y quita el servidor añadido.
+  steps:
+    - title: Desactivar el cliente y quitar el servidor
+      commands:
+        - /system ntp client set enabled=no
+        - /system ntp client servers remove [find address={{ntpServer}}]
+      explanation: Vuelve a dejar el cliente NTP como estaba de fábrica.
+  lockoutRecovery: Este cambio no afecta al acceso de gestión.
+sources:
+  - title: RouterOS — NTP
+    url: https://help.mikrotik.com/docs/display/ROS/NTP
+status:
+  level: unverified
+  reviewed: '2026-10-14'
+  firmware: RouterOS 7
+  notes: >-
+    Marcada sin verificar. La documentación consultada describe las propiedades
+    enabled y los servidores en /system ntp client servers, y los estados
+    synchronized y waiting, pero no muestra los comandos completos de alta, baja ni
+    consulta. Tampoco cubre la zona horaria. Falta probarla en un equipo real.

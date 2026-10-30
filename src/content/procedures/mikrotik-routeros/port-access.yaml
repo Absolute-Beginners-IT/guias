@@ -1,0 +1,132 @@
+platform: mikrotik-routeros
+task: port-access
+summary: >-
+  Deja un puerto del bridge de un MikroTik con RouterOS como puerto de acceso de una
+  VLAN, cambiando su PVID y aceptando solo tramas sin etiqueta.
+risk:
+  level: medium
+  reason: >-
+    El equipo conectado cambia de red en el momento y RouterOS guarda el cambio sin
+    paso de confirmación. Si el puerto es tu vía de gestión, pierdes el acceso.
+params:
+  - id: interfaceName
+    label: Puerto
+    type: text
+    example: sfp-sfpplus5
+    pattern: '^[A-Za-z0-9_.+-]{1,32}$'
+    patternHint: Nombre del puerto tal como aparece en /interface bridge port print, sin espacios.
+  - id: vlanId
+    label: VLAN de destino
+    type: vlan-id
+    example: '20'
+    help: Tiene que tener ya su entrada en la tabla de VLAN del bridge.
+  - id: previousPvid
+    label: PVID que tiene ahora el puerto
+    type: vlan-id
+    example: '1'
+    help: Lo ves en la comprobación previa; hace falta para poder volver atrás.
+  - id: previousFrameTypes
+    label: frame-types que tiene ahora el puerto
+    type: choice
+    example: admit-all
+    options:
+      - admit-all
+      - admit-only-untagged-and-priority-tagged
+      - admit-only-vlan-tagged
+    help: Lo ves en /interface bridge port print detail; el valor de fábrica es admit-all.
+  - id: backupName
+    label: Nombre de la copia de respaldo
+    type: text
+    example: crs317-antes-puerto-5
+    pattern: '^(flash/)?[A-Za-z0-9_-]{1,40}$'
+    patternHint: Hasta 40 caracteres; letras, números, guion y guion bajo, sin extensión. Puede empezar por flash/.
+preflight:
+  - text: >-
+      Comprueba que el bridge tiene vlan-filtering=yes. Si está en no, detente: el
+      PVID no tiene efecto hasta que el filtrado de VLAN está activado.
+    command: /interface bridge print
+  - text: Anota el PVID y el frame-types actuales del puerto.
+    command: /interface bridge port print detail
+  - text: >-
+      Confirma que la VLAN de destino tiene su entrada en la tabla y que los trunks
+      la llevan etiquetada.
+    command: /interface bridge vlan print
+  - text: Guarda una copia completa de la configuración.
+    command: /system backup save name={{backupName}}
+  - text: Comprueba que no es el puerto por el que estás conectado ni un enlace hacia otro switch.
+steps:
+  - title: Activar Safe Mode
+    manual: true
+    explanation: >-
+      Pulsa Ctrl+X (o F4). El prompt pasa a mostrar SAFE. Si tu sesión se corta, los
+      cambios se deshacen solos al vencer el tiempo de espera de la conexión.
+  - title: Cambiar el PVID del puerto
+    commands:
+      - /interface bridge port set [find where interface={{interfaceName}}] pvid={{vlanId}} frame-types=admit-only-untagged-and-priority-tagged
+    explanation: >-
+      Coloca en la VLAN {{vlanId}} el tráfico sin etiqueta que entra por
+      {{interfaceName}} y hace que el puerto rechace tramas etiquetadas. Con ese
+      frame-types, RouterOS añade el puerto como miembro sin etiqueta de la VLAN de
+      su PVID.
+    warning: El equipo conectado cambia de red al ejecutar este comando.
+    breakdown:
+      - token: /interface bridge port set
+        meaning: Modifica propiedades de un puerto del bridge.
+      - token: '[find where interface={{interfaceName}}]'
+        meaning: Selecciona el puerto por su nombre en vez de por su número de lista, que puede cambiar.
+      - token: pvid={{vlanId}}
+        meaning: VLAN que se asigna al tráfico que entra sin etiqueta.
+      - token: frame-types=admit-only-untagged-and-priority-tagged
+        meaning: El puerto solo acepta tramas sin etiqueta, como corresponde a un puerto de acceso.
+  - title: Verificar antes de salir de Safe Mode
+    manual: true
+    explanation: >-
+      Haz las comprobaciones de la sección Verificación sin salir de Safe Mode y
+      confirma que sigues teniendo acceso de gestión.
+  - title: Salir de Safe Mode conservando el cambio
+    manual: true
+    explanation: >-
+      Pulsa Ctrl+X de nuevo. El cambio queda guardado. Si algo no está bien, pulsa
+      Ctrl+D en su lugar para salir deshaciendo lo hecho.
+verification:
+  - command: /interface bridge port print
+    expect: El puerto {{interfaceName}} aparece con PVID {{vlanId}} y conserva la marca H (hw-offload).
+  - command: /interface bridge vlan print
+    expect: >-
+      En la VLAN {{vlanId}}, {{interfaceName}} aparece en CURRENT-UNTAGGED cuando el
+      puerto tiene enlace. Si no aparece, el puerto no es miembro de la VLAN y hay
+      que revisar la entrada de esa VLAN.
+rollback:
+  summary: >-
+    Dentro de Safe Mode, Ctrl+D deshace todo. Fuera de Safe Mode, se devuelven al
+    puerto su PVID y su frame-types anteriores.
+  steps:
+    - title: Si sigues en Safe Mode
+      manual: true
+      explanation: Pulsa Ctrl+D. Sale de Safe Mode deshaciendo los cambios hechos en él.
+    - title: Si ya saliste de Safe Mode
+      commands:
+        - /interface bridge port set [find where interface={{interfaceName}}] pvid={{previousPvid}} frame-types={{previousFrameTypes}}
+      explanation: Devuelve el puerto al PVID {{previousPvid}} y al frame-types que tenía.
+  lockoutRecovery: >-
+    Si la sesión se corta con Safe Mode activo, espera unos 9 minutos: los cambios
+    se deshacen solos. Si ya habías salido de Safe Mode, conéctate por consola y
+    devuelve el puerto a sus valores, o carga la copia guardada antes de empezar.
+sources:
+  - title: RouterOS — Bridge VLAN Table
+    url: https://help.mikrotik.com/docs/display/ROS/Bridge+VLAN+Table
+  - title: RouterOS — Bridging and Switching (propiedades de los puertos del bridge)
+    url: https://help.mikrotik.com/docs/display/ROS/Bridging+and+Switching
+  - title: RouterOS — Configuration Management (Safe Mode)
+    url: https://help.mikrotik.com/docs/display/ROS/Configuration+Management
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: RouterOS 7
+  notes: >-
+    pvid, frame-types y la forma set [find where interface=...] están contrastados
+    con la documentación oficial, que también describe el alta automática del
+    puerto como miembro sin etiqueta. El ejemplo oficial añade además el puerto de
+    forma explícita en untagged de la entrada de la VLAN; si la verificación no
+    muestra el puerto, hay que hacerlo así. No se pudo consultar la página
+    específica de los switches CRS3xx. Falta probar la guía en un equipo real.

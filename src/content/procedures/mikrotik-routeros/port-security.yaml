@@ -1,0 +1,180 @@
+platform: mikrotik-routeros
+task: port-security
+summary: >-
+  Deja que un puerto de acceso de un MikroTik CRS3xx con RouterOS 7 solo acepte
+  tráfico de las direcciones MAC permitidas, con reglas del chip de conmutación, el
+  aprendizaje de MAC desactivado y una entrada estática en la tabla de equipos del
+  bridge. RouterOS no tiene un máximo de MAC aprendidas por puerto: el límite se
+  hace con una lista de MAC permitidas, y las demás se descartan.
+risk:
+  level: medium
+  reason: >-
+    Solo toca un puerto, pero una MAC mal escrita o un equipo de más detrás (un
+    teléfono IP con un ordenador, una máquina virtual) deja sin red a quien esté
+    conectado. RouterOS guarda cada cambio en el momento.
+params:
+  - id: interfaceName
+    label: Puerto de acceso que se protege
+    type: text
+    example: sfp-sfpplus6
+    pattern: '^[A-Za-z0-9_.+-]{1,32}$'
+    patternHint: Nombre del puerto tal como aparece en /interface bridge port print, sin espacios.
+    help: Un puerto con equipos finales detrás. Nunca un enlace a otro switch ni a un punto de acceso.
+  - id: allowedMac
+    label: Dirección MAC permitida
+    type: text
+    example: 64:D1:54:81:EF:8E
+    pattern: '^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'
+    patternHint: Seis pares hexadecimales separados por dos puntos, por ejemplo 64:D1:54:81:EF:8E.
+  - id: switchName
+    label: Nombre del chip de conmutación
+    type: text
+    example: switch1
+    pattern: '^[A-Za-z0-9_.-]{1,32}$'
+    patternHint: Nombre tal como aparece en /interface ethernet switch print; en el CRS317 suele ser switch1.
+  - id: bridgeName
+    label: Nombre del bridge
+    type: text
+    example: bridge
+    pattern: '^[A-Za-z0-9_.-]{1,32}$'
+    patternHint: Nombre tal como aparece en /interface bridge print, sin espacios.
+preflight:
+  - text: Confirma el nombre del chip de conmutación.
+    command: /interface ethernet switch print
+  - text: >-
+      Mira las reglas del chip. Esta guía supone que ninguna regla usa ya
+      {{interfaceName}}; si hay alguna, detente, porque se procesan en orden y la
+      primera que coincide gana.
+    command: /interface ethernet switch rule print
+  - text: >-
+      Mira qué MAC hay ahora detrás de {{interfaceName}}. Tienen que ser solo los
+      equipos previstos; apúntalas todas.
+    command: /interface bridge host print
+  - text: Confirma que el puerto forma parte del bridge, con la marca H.
+    command: /interface bridge port print
+  - text: Confirma que no estás conectado a la gestión a través de ese puerto.
+steps:
+  - title: Activar Safe Mode
+    manual: true
+    explanation: >-
+      Pulsa Ctrl+X (o F4). El prompt pasa a mostrar SAFE. Si tu sesión se corta, los
+      cambios se deshacen solos al vencer el tiempo de espera de la conexión.
+  - title: Permitir la MAC del equipo
+    commands:
+      - /interface ethernet switch rule add switch={{switchName}} ports={{interfaceName}} src-mac-address={{allowedMac}}/FF:FF:FF:FF:FF:FF
+    explanation: >-
+      Crea una regla en el chip que deja pasar sin cambios el tráfico que entra por
+      {{interfaceName}} con origen {{allowedMac}}. Si detrás hay más de un equipo,
+      repite este paso con cada MAC antes de pasar al siguiente: la regla de
+      descarte tiene que quedar la última.
+    breakdown:
+      - token: /interface ethernet switch rule add
+        meaning: Añade una regla de filtrado (ACL) al final de la lista del chip de conmutación.
+      - token: switch={{switchName}}
+        meaning: Chip en el que se aplica la regla.
+      - token: ports={{interfaceName}}
+        meaning: Puerto de entrada al que se aplica.
+      - token: src-mac-address={{allowedMac}}/FF:FF:FF:FF:FF:FF
+        meaning: MAC de origen, con una máscara que exige que coincida completa.
+  - title: Descartar el tráfico de cualquier otra MAC
+    commands:
+      - /interface ethernet switch rule add switch={{switchName}} ports={{interfaceName}} new-dst-ports=""
+    explanation: >-
+      Crea una segunda regla, sin condición de MAC, que descarta todo lo que entra
+      por {{interfaceName}} y no coincidió con la regla anterior.
+    warning: >-
+      Desde este momento, un equipo con otra MAC conectado a {{interfaceName}} se
+      queda sin red. Si la MAC permitida está mal escrita, el equipo legítimo también.
+    breakdown:
+      - token: new-dst-ports=""
+        meaning: Lista de puertos de salida vacía, que significa descartar el paquete.
+  - title: Desactivar el aprendizaje de MAC en el puerto
+    commands:
+      - /interface bridge port set [find where interface={{interfaceName}}] learn=no unknown-unicast-flood=no
+    explanation: >-
+      El puerto deja de aprender direcciones y no recibe tráfico dirigido a MAC
+      desconocidas, así un equipo no permitido tampoco recibe tráfico que no le toca.
+    breakdown:
+      - token: learn=no
+        meaning: Desactiva el aprendizaje de MAC en el puerto (el valor de fábrica es auto).
+      - token: unknown-unicast-flood=no
+        meaning: No envía por este puerto las tramas dirigidas a MAC que el switch no conoce.
+  - title: Añadir la MAC permitida a la tabla de equipos
+    commands:
+      - /interface bridge host add bridge={{bridgeName}} interface={{interfaceName}} mac-address={{allowedMac}}
+    explanation: >-
+      Sin aprendizaje, el switch no sabe que {{allowedMac}} está en {{interfaceName}}.
+      Esta entrada estática se lo dice, para que el tráfico hacia el equipo salga por
+      ese puerto. Repítela con cada MAC que permitiste.
+  - title: Verificar antes de salir de Safe Mode
+    manual: true
+    explanation: >-
+      Haz las comprobaciones de la sección Verificación sin salir de Safe Mode y
+      confirma que el equipo permitido sigue teniendo red.
+  - title: Salir de Safe Mode conservando el cambio
+    manual: true
+    explanation: >-
+      Pulsa Ctrl+X de nuevo. El cambio queda guardado. Si algo no está bien, pulsa
+      Ctrl+D en su lugar para salir deshaciendo lo hecho.
+verification:
+  - command: /interface ethernet switch rule print
+    expect: >-
+      Hay una regla para {{interfaceName}} con src-mac-address {{allowedMac}} (una por
+      cada MAC permitida) y, después, la que tiene new-dst-ports vacío. Ninguna tiene
+      la marca I (inválida).
+  - command: /interface bridge host print
+    expect: '{{allowedMac}} aparece en {{interfaceName}} como entrada estática, sin la marca D (dinámica).'
+  - command: /interface bridge port print
+    expect: '{{interfaceName}} conserva la marca H.'
+rollback:
+  summary: >-
+    Dentro de Safe Mode, Ctrl+D deshace todo. Fuera de Safe Mode se borran las reglas
+    del puerto, se vuelve a activar el aprendizaje y se quita la entrada estática.
+  steps:
+    - title: Si sigues en Safe Mode
+      manual: true
+      explanation: Pulsa Ctrl+D. Sale de Safe Mode deshaciendo los cambios hechos en él.
+    - title: Borrar las reglas del puerto
+      commands:
+        - /interface ethernet switch rule remove [find where ports={{interfaceName}}]
+      explanation: >-
+        Borra todas las reglas del chip que usan {{interfaceName}}. Es exacto porque
+        antes de empezar no había ninguna; si había alguna, borra solo las que creaste,
+        por su número en /interface ethernet switch rule print.
+    - title: Volver a activar el aprendizaje
+      commands:
+        - /interface bridge port set [find where interface={{interfaceName}}] learn=auto unknown-unicast-flood=yes
+      explanation: Devuelve el puerto a los valores de fábrica.
+    - title: Quitar la entrada estática
+      commands:
+        - /interface bridge host remove [find where mac-address={{allowedMac}} and !dynamic]
+      explanation: Borra la entrada estática de {{allowedMac}}; el switch la vuelve a aprender sola.
+  lockoutRecovery: >-
+    Si la sesión se corta con Safe Mode activo, espera unos 9 minutos: los cambios
+    se deshacen solos. Si te quedaste sin acceso porque gestionabas el switch a
+    través de ese puerto, entra por otro puerto o por la consola serie y borra las
+    reglas del puerto.
+sources:
+  - title: RouterOS Manual 7.25 — Marvell Prestera switch chip features (Port Security)
+    url: https://manual.mikrotik.com/docs/7.25/bridging-and-switching/marvell-prestera-switch-chip-features/
+  - title: RouterOS CLI reference (7.26) — /interface ethernet switch rule
+    url: https://manual.mikrotik.com/docs/cli-reference/interface/ethernet/switch/rule/
+  - title: RouterOS CLI reference (7.26) — /interface bridge port
+    url: https://manual.mikrotik.com/docs/cli-reference/interface/bridge/port/
+  - title: RouterOS — Bridging and Switching (learn, max-learned-entries, tabla de equipos)
+    url: https://help.mikrotik.com/docs/display/ROS/Bridging+and+Switching
+status:
+  level: unverified
+  reviewed: '2026-10-14'
+  firmware: RouterOS 7 (referencia de la CLI 7.26)
+  notes: >-
+    Marcada sin verificar. El método (regla que permite la MAC, regla con
+    new-dst-ports vacío, learn=no con unknown-unicast-flood=no y entrada estática en
+    /interface bridge host) es el del apartado Port Security de la documentación de
+    los chips Marvell Prestera, y el CRS317 admite 1024 reglas. RouterOS 7 no tiene
+    un límite de MAC aprendidas por puerto: max-learned-entries, disponible desde
+    7.16, limita todo el bridge. La documentación avisa de que el puerto sigue
+    recibiendo difusión y multidifusión. No se confirmaron en la documentación: la
+    forma remove [find ...] en reglas y equipos, los valores de vuelta atrás y que
+    añadir reglas las coloca al final de la lista. Falta probar la guía en un equipo
+    real.

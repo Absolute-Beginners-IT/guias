@@ -1,0 +1,59 @@
+id: traffic-basics
+title: 'Cómo viaja el tráfico: MAC, IP y VLAN'
+order: 2
+summary: >-
+  Las tres ideas que hay que tener claras antes de tocar un switch: la dirección MAC,
+  la dirección IP y la VLAN, y qué tiene que ver cada una con las capas 2 y 3.
+sections:
+  - heading: Capa 2 y capa 3
+    paragraphs:
+      - >-
+        Las redes se explican por capas. La capa 2 es la de la red local: los equipos se
+        identifican por su MAC y el switch los conecta. La capa 3 es la de IP: los
+        equipos se identifican por su dirección IP y los routers llevan el tráfico de una
+        red a otra.
+      - >-
+        Cuando alguien dice "switch de capa 2" se refiere a uno que solo conmuta dentro
+        de cada red. "De capa 3" quiere decir que además puede enrutar entre redes
+        internas, sin pasar por un router.
+  - heading: Dirección MAC
+    paragraphs:
+      - >-
+        Es la dirección física de cada tarjeta de red, grabada de fábrica, con forma
+        como 3C:52:82:1A:2B:3C. Sirve dentro de la red local; no sale a internet. Es lo
+        que aprende el switch y lo que vigila la seguridad de puerto.
+  - heading: Dirección IP, máscara y puerta de enlace
+    paragraphs:
+      - >-
+        La dirección IP identifica al equipo dentro de una red, por ejemplo
+        192.168.10.25. La máscara, o el prefijo como /24, dice qué parte de la dirección
+        es la red y cuál el equipo: con /24, todos los 192.168.10.x están en la misma
+        red. La puerta de enlace es el router al que el equipo envía todo lo que va a
+        otras redes.
+      - >-
+        Un switch gestionado también tiene su propia IP, la IP de gestión, para poder
+        entrar a configurarlo por SSH o por la web. Esa IP vive en una VLAN concreta,
+        la de gestión.
+    points:
+      - 'DHCP: el servicio que reparte IP automáticamente a los equipos que se conectan.'
+      - 'Prefijo /24: 256 direcciones, de las que 254 se pueden usar para equipos.'
+  - heading: VLAN
+    paragraphs:
+      - >-
+        Una VLAN es una red local virtual: divide un switch físico en varias redes
+        separadas que no se ven entre sí, como si fueran switches distintos. Así, por
+        ejemplo, los teléfonos, las cámaras, los invitados y los ordenadores de la
+        oficina comparten cables y switches pero no tráfico.
+      - >-
+        Cada VLAN tiene un número del 1 al 4094. Un puerto de acceso pertenece a una sola
+        VLAN y el equipo conectado no sabe que existe. Un puerto trunk lleva varias VLAN
+        a la vez hacia otro switch, marcando cada trama con su número (etiqueta 802.1Q);
+        la VLAN nativa es la que viaja sin etiqueta.
+      - >-
+        Para que dos VLAN se comuniquen hace falta un router o un switch de capa 3, y
+        ahí es donde se controla qué puede hablar con qué.
+related:
+  - vlan-create
+  - port-access
+  - port-trunk
+  - mgmt-ip

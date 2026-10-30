@@ -1,0 +1,20 @@
+id: port-trunk
+title: Configurar un puerto trunk
+group: vlans-ports
+order: 3
+summary: Hace que un puerto transporte varias VLAN etiquetadas hacia otro switch, un router o un servidor.
+explanation: >-
+  Un trunk lleva varias VLAN por el mismo enlace; cada trama viaja con una etiqueta
+  802.1Q que indica a qué VLAN pertenece. Se usa en los enlaces entre switches y
+  hacia equipos que entienden etiquetas. La VLAN nativa es la que viaja sin
+  etiqueta. La lista de VLAN permitidas decide cuáles pasan: tiene que coincidir en
+  los dos extremos del enlace.
+risks:
+  - Un trunk suele ser un enlace troncal; un error corta de golpe todas las VLAN que pasan por él.
+  - En varias plataformas, indicar la lista de VLAN permitidas sustituye la anterior en vez de ampliarla.
+  - Si la VLAN de gestión no queda permitida en el trunk, pierdes el acceso remoto al switch.
+  - Una VLAN nativa distinta en cada extremo mezcla el tráfico de dos VLAN.
+prerequisites:
+  - Todas las VLAN que va a transportar el trunk ya existen en el switch.
+  - Conocer la configuración del otro extremo del enlace.
+  - Tener acceso por consola y una copia de la configuración hecha antes de empezar.

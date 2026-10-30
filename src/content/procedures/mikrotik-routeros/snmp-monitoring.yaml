@@ -1,0 +1,144 @@
+platform: mikrotik-routeros
+task: snmp-monitoring
+summary: >-
+  Activa SNMPv3 con autenticación y cifrado (authPriv, SHA1 y AES) en un MikroTik con
+  RouterOS 7, de solo lectura y limitado a la IP del servidor de monitorización, y
+  deja sin acceso la comunidad public de fábrica.
+risk:
+  level: medium
+  reason: >-
+    No afecta al tráfico, pero si SNMP se activa sin tocar la comunidad public de
+    fábrica, cualquiera de la red puede leer el equipo por SNMP v1/v2c sin contraseña.
+    RouterOS guarda cada cambio en el momento.
+params:
+  - id: nmsIp
+    label: IP del servidor de monitorización
+    type: ipv4
+    example: 192.168.10.40
+  - id: snmpUser
+    label: Usuario SNMPv3
+    type: text
+    example: snmpuser
+    pattern: '^[A-Za-z0-9_-]{1,32}$'
+    patternHint: Sin espacios; letras, números, guion y guion bajo. Tiene que coincidir con el de la herramienta de monitorización.
+  - id: authKey
+    label: Clave de autenticación SNMPv3
+    type: secret
+    example: Cambia3sta-Clave
+    pattern: '^[A-Za-z0-9_.@+-]{8,32}$'
+    patternHint: De 8 a 32 caracteres; letras, números y los signos _ . @ + -, sin espacios.
+    help: Cópiala del gestor de contraseñas; la herramienta de monitorización necesita la misma.
+  - id: privKey
+    label: Clave de cifrado SNMPv3
+    type: secret
+    example: Otra-Clave-Distinta9
+    pattern: '^[A-Za-z0-9_.@+-]{8,32}$'
+    patternHint: De 8 a 32 caracteres; letras, números y los signos _ . @ + -, sin espacios.
+    help: Cópiala del gestor de contraseñas; la herramienta de monitorización necesita la misma.
+    differentFrom:
+      param: authKey
+      hint: Usa una clave distinta de la de autenticación.
+  - id: location
+    label: Ubicación del equipo
+    type: text
+    example: Sede-Central-Rack2
+    pattern: '^[A-Za-z0-9_.-]{1,64}$'
+    patternHint: Sin espacios; letras, números, punto, guion y guion bajo.
+  - id: contact
+    label: Contacto
+    type: text
+    example: sistemas
+    pattern: '^[A-Za-z0-9_.@-]{1,64}$'
+    patternHint: Sin espacios; letras, números, punto, guion, guion bajo y arroba.
+preflight:
+  - text: Mira si SNMP está activo.
+    command: /snmp print
+  - text: >-
+      Mira las comunidades. De fábrica existe public, marcada como predeterminada:
+      acepta cualquier dirección, da lectura y no tiene seguridad.
+    command: /snmp community print
+  - text: >-
+      Ten preparadas en el gestor de contraseñas dos claves distintas, una de
+      autenticación y otra de cifrado, de al menos 8 caracteres. Evita espacios,
+      comillas, el signo $ y el signo ?, que la consola de RouterOS interpreta.
+steps:
+  - title: Dejar sin acceso la comunidad de fábrica
+    commands:
+      - /snmp community set [find default=yes] addresses={{nmsIp}}/32 read-access=no write-access=no
+    explanation: >-
+      La comunidad predeterminada no se puede borrar. Este comando le quita la lectura
+      y la escritura y la limita a {{nmsIp}}, así no sirve para consultar el equipo
+      por SNMP v1/v2c aunque alguien conozca su nombre.
+    breakdown:
+      - token: '[find default=yes]'
+        meaning: Selecciona la comunidad predeterminada aunque alguien la haya renombrado.
+      - token: read-access=no write-access=no
+        meaning: Sin lectura ni escritura, la comunidad no responde a ninguna consulta.
+  - title: Crear el usuario SNMPv3
+    commands:
+      - /snmp community add name={{snmpUser}} addresses={{nmsIp}}/32 security=private authentication-protocol=SHA1 encryption-protocol=AES read-access=yes write-access=no authentication-password={{authKey}} encryption-password={{privKey}}
+    explanation: En RouterOS 7 el usuario SNMPv3 se crea como una comunidad.
+    warning: >-
+      El comando lleva las claves en claro: cuando lo pegues, no lo dejes en notas,
+      chats ni capturas. RouterOS las oculta después en la configuración exportada.
+    breakdown:
+      - token: name={{snmpUser}}
+        meaning: Nombre del usuario SNMPv3; es el que se pone en la herramienta de monitorización.
+      - token: addresses={{nmsIp}}/32
+        meaning: Solo acepta consultas que vengan exactamente de {{nmsIp}}.
+      - token: security=private
+        meaning: Nivel authPriv; cada consulta se autentica y viaja cifrada.
+      - token: authentication-protocol=SHA1
+        meaning: Algoritmo de autenticación. RouterOS 7 también admite SHA256, SHA384 y SHA512 si la herramienta de monitorización los soporta.
+      - token: encryption-protocol=AES
+        meaning: Algoritmo de cifrado. La otra opción, DES, es débil y no debe usarse.
+      - token: authentication-password={{authKey}} encryption-password={{privKey}}
+        meaning: Las dos claves, distintas entre sí; la herramienta de monitorización usa las mismas.
+      - token: read-access=yes write-access=no
+        meaning: Solo lectura; nadie puede cambiar la configuración por SNMP.
+  - title: Activar SNMP con ubicación y contacto
+    commands:
+      - /snmp set enabled=yes location={{location}} contact={{contact}}
+    explanation: >-
+      Activa el agente SNMP. Se hace al final, cuando la comunidad de fábrica ya no da
+      acceso y el usuario SNMPv3 ya está limitado a {{nmsIp}}.
+  - title: Probar desde el servidor de monitorización
+    manual: true
+    explanation: >-
+      En la herramienta de monitorización configura SNMPv3 con el usuario {{snmpUser}},
+      nivel authPriv, autenticación SHA1 y cifrado AES, con las mismas claves, y
+      comprueba que el equipo responde. En NinjaOne, si el descubrimiento de red no lo
+      encuentra, agrégalo a mano con su IP.
+verification:
+  - command: /snmp print
+    expect: SNMP aparece activo, con la ubicación y el contacto configurados.
+  - command: /snmp community print
+    expect: >-
+      La comunidad predeterminada tiene {{nmsIp}}/32, lectura no y escritura no.
+      {{snmpUser}} tiene {{nmsIp}}/32, seguridad private, SHA1, AES, lectura sí y
+      escritura no. Las claves no se muestran.
+rollback:
+  summary: >-
+    Apaga SNMP: así nadie puede consultar el equipo. El usuario SNMPv3 y la comunidad
+    de fábrica pueden quedarse como están, porque sin SNMP activo no se usan.
+  steps:
+    - title: Apagar SNMP
+      commands:
+        - /snmp set enabled=no
+      explanation: Nadie puede consultar el equipo por SNMP.
+  lockoutRecovery: Este cambio no afecta al acceso de gestión por SSH, WinBox ni consola.
+sources:
+  - title: RouterOS — SNMP
+    url: https://help.mikrotik.com/docs/display/ROS/SNMP
+  - title: RouterOS CLI reference (7.26) — /snmp community
+    url: https://manual.mikrotik.com/docs/cli-reference/snmp/community/
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: RouterOS 7 (referencia de la CLI 7.26)
+  notes: >-
+    La referencia de la CLI de RouterOS 7 confirma addresses, security
+    (none/authorized/private), SHA1 a SHA512, DES y AES, y las propiedades de
+    lectura y escritura. La guía interna de la empresa, probada en un switch real,
+    usa el mismo comando de creación con SHA1 y AES. Lo que falta probar en un
+    equipo real es el filtro [find default=yes] sobre la comunidad de fábrica.

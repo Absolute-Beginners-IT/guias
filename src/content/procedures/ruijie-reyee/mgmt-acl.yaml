@@ -1,0 +1,147 @@
+platform: ruijie-reyee
+task: mgmt-acl
+summary: >-
+  Crea en un Ruijie NBS3200, desde su interfaz web, una ACL de IP que solo deja
+  llegar a la IP de gestión del switch desde la red de administración, y la aplica en
+  la entrada de los puertos de usuario.
+risk:
+  level: high
+  reason: >-
+    El switch no tiene una lista de IP permitidas para la gestión, así que se usa una
+    ACL de puerto, que filtra todo el tráfico que entra por esos puertos. Si falta la
+    regla final que permite el resto, los usuarios se quedan sin red; si tu red no
+    está en la primera regla, pierdes el acceso web.
+params:
+  - id: aclName
+    label: Nombre de la ACL
+    type: text
+    example: proteger-gestion
+    pattern: '^[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres; letras, números, guion y guion bajo.
+  - id: switchIp
+    label: IP de gestión del switch
+    type: ipv4
+    example: 192.168.10.23
+    help: La que aparece en Local Device > Ports > MGMT IP > MGMT IP.
+  - id: mgmtNetwork
+    label: Red de administración permitida
+    type: cidr
+    example: 192.168.10.0/24
+    help: Red desde la que se podrá entrar a la gestión. Tu equipo tiene que estar dentro.
+  - id: testPort
+    label: Puerto de prueba
+    type: text
+    example: Gi20
+    pattern: '^[A-Za-z]{2}\d{1,2}$'
+    patternHint: Nombre del puerto tal como aparece en el panel, por ejemplo Gi20.
+    help: Un puerto de usuario que no sea tu vía de gestión, con un equipo de fuera de la red de administración.
+preflight:
+  - text: >-
+      Haz antes una copia de la configuración (Local Device > System > Backup >
+      Backup & Import, botón Backup) y guárdala fuera del switch: es la vuelta atrás
+      si algo sale mal.
+  - text: >-
+      Comprueba que la IP de tu equipo está dentro de {{mgmtNetwork}} y que la IP de
+      gestión del switch es {{switchIp}}.
+  - text: >-
+      Anota qué otros equipos le hablan a la IP del switch desde fuera de
+      {{mgmtNetwork}}: servidor de monitorización SNMP, servidor NTP, servidor DHCP si
+      la IP de gestión es dinámica. Cada uno necesita su propia regla Allow antes del
+      bloqueo.
+  - text: Ten a mano un equipo de prueba fuera de la red de administración, conectado en {{testPort}}.
+steps:
+  - title: Crear la ACL de IP
+    manual: true
+    explanation: >-
+      Ve a Local Device > Security > ACL > ACL List y pulsa Add. Elige Based on IP
+      address, escribe el nombre {{aclName}} y pulsa OK.
+  - title: Permitir la red de administración hacia el switch
+    manual: true
+    explanation: >-
+      Pulsa Details en la fila de {{aclName}} y añade una regla: Action Allow, IP
+      Protocol Number All, Src IP Address {{mgmtNetwork}} y Dest IP Address
+      {{switchIp}}. Pulsa Save.
+    warning: Si el formulario solo admite una dirección, pon la de tu equipo, no la de la red.
+  - title: Permitir los otros servicios que hablan con el switch
+    manual: true
+    explanation: >-
+      Por cada equipo que anotaste en la preparación, añade otra regla Allow con su IP
+      de origen y destino {{switchIp}}. Si no hay ninguno, sáltate este paso.
+  - title: Bloquear el resto del tráfico hacia el switch
+    manual: true
+    explanation: >-
+      Añade una regla Action Block, IP Protocol Number All, Src IP Address All y Dest
+      IP Address {{switchIp}}. Pulsa Save.
+  - title: Permitir todo lo demás
+    manual: true
+    explanation: >-
+      Añade la última regla: Action Allow, IP Protocol Number All, Src IP Address All
+      y Dest IP Address All. Pulsa Save. Revisa el orden de la lista y usa Move hasta
+      que quede Allow de administración, Allow de servicios, Block hacia el switch y
+      Allow de todo.
+    warning: >-
+      Al final de la ACL hay una regla oculta que deniega todo. Sin esta regla, los
+      puertos donde apliques la ACL dejan de pasar tráfico de los usuarios.
+  - title: Aplicarla en un puerto de prueba
+    manual: true
+    explanation: >-
+      En ACL List, pulsa Edit en la columna Action de {{testPort}} (o Batch Add),
+      elige la IP ACL {{aclName}} y pulsa OK. Desde el equipo de prueba, comprueba que
+      la web del switch ya no abre y que sigue navegando con normalidad.
+  - title: Aplicarla en los demás puertos de usuario
+    manual: true
+    explanation: >-
+      Si la prueba salió bien, pulsa Batch Add, selecciona los puertos de usuario,
+      elige {{aclName}} como IP ACL y pulsa OK. Deja para el final, y solo si hace
+      falta, el enlace hacia el troncal y el puerto por el que llegas tú.
+    warning: >-
+      La ACL solo filtra lo que entra por los puertos donde la aplicas. Si un equipo
+      ajeno llega a la gestión por un puerto sin ACL, por ejemplo a través del
+      troncal, puede seguir entrando.
+verification:
+  - expect: >-
+      En ACL List, {{aclName}} tiene las reglas en el orden Allow de administración,
+      Allow de servicios, Block hacia {{switchIp}} y Allow de todo, y está aplicada en
+      los puertos de usuario.
+  - expect: >-
+      Desde tu equipo en {{mgmtNetwork}} la web del switch abre; desde el equipo de
+      prueba en {{testPort}} no abre, pero el equipo sigue teniendo red.
+  - expect: >-
+      La monitorización y la hora del switch siguen funcionando después de aplicar la
+      ACL.
+rollback:
+  summary: Desvincula la ACL de los puertos; deja de filtrar en el momento.
+  steps:
+    - title: Desvincular la ACL
+      manual: true
+      explanation: >-
+        En Local Device > Security > ACL > ACL List, marca los puertos que tienen
+        {{aclName}} y pulsa Unbind Selected, o Unbind en cada fila.
+    - title: Borrar la ACL si ya no hace falta
+      manual: true
+      explanation: >-
+        Con la ACL ya desvinculada de todos los puertos, puedes borrarla de la lista.
+        Mientras esté aplicada en un puerto no se puede editar ni borrar.
+  lockoutRecovery: >-
+    Si perdiste el acceso web, conecta tu portátil con una IP de {{mgmtNetwork}} en un
+    puerto donde no esté aplicada la ACL y desvincúlala. Si no hay forma, mantén
+    pulsado el botón Reset más de 5 segundos: el switch vuelve a fábrica (IP
+    10.44.77.200, contraseña admin) y después importas la copia desde Local Device >
+    System > Backup > Backup & Import.
+sources:
+  - title: Ruijie Reyee NBS3200 V2 — ReyeeOS 2.341 Configuration Guide, apartado ACL (Creating ACL Rules y Applying ACL Rules)
+    url: https://reyee.ruijie.com/en-global/support/documents/slide_rg-nbs3200-24gt4xs-p-v2-nbs3200-48gt4xs-p-v2-switches-implementation-cookbook/
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: ReyeeOS 2.341
+  notes: >-
+    Menús, acciones Allow y Block, campos de las reglas, la denegación oculta del
+    final, el orden con Move y la aplicación solo en entrada contrastados con la guía
+    oficial. La guía no documenta una lista de IP permitidas para la gestión web, así
+    que esta ACL filtra el tráfico que entra por los puertos, no el servicio web en sí:
+    bloquea todo el tráfico IP hacia la IP del switch (web, ping, SNMP, NTP) y no se
+    puede limitar a HTTP o HTTPS porque las reglas no tienen campo de puerto TCP.
+    Tampoco aclara si el campo de IP admite una red con prefijo ni confirma que la
+    ACL filtre el tráfico dirigido al propio switch, así que la prueba en un puerto
+    es obligatoria. Falta probarlo en un NBS3200 real.

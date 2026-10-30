@@ -1,0 +1,25 @@
+id: stp-edge-protection
+title: Proteger contra bucles con Spanning Tree
+group: security-resilience
+order: 1
+summary: >-
+  Comprueba que Spanning Tree está activo y marca un puerto de acceso como puerto de
+  borde con BPDU Guard, para que un bucle o un switch no autorizado lo apaguen.
+explanation: >-
+  Un bucle de capa 2 aparece cuando hay dos caminos entre los mismos switches, por
+  ejemplo un cable conectado por error entre dos tomas de la pared. Las tramas de
+  difusión dan vueltas sin fin y en segundos saturan toda la red. Spanning Tree (STP,
+  y sus versiones rápidas RSTP y MSTP) detecta los caminos duplicados y bloquea los
+  sobrantes. Un puerto de borde (edge, portfast) es uno donde solo hay un equipo
+  final: arranca enseguida, sin esperar a Spanning Tree. BPDU Guard apaga ese puerto
+  si por él llegan mensajes de Spanning Tree, es decir, si alguien conecta un switch
+  donde solo debería haber un ordenador.
+risks:
+  - Marcar como puerto de borde un enlace entre switches quita la protección contra bucles de ese enlace.
+  - Con BPDU Guard, conectar un switch o un teléfono que reenvía BPDU apaga el puerto hasta que alguien lo reactive.
+  - Desactivar Spanning Tree en un switch con enlaces redundantes forma un bucle y puede tumbar toda la red.
+  - Cambiar el modo de Spanning Tree (STP, RSTP, MSTP) recalcula la topología y corta el tráfico unos segundos.
+prerequisites:
+  - Saber qué puertos son de acceso (un solo equipo final) y cuáles van a otros switches.
+  - No cambiar el modo de Spanning Tree en horario de trabajo.
+  - Tener acceso por consola o por un puerto que no se vaya a tocar.

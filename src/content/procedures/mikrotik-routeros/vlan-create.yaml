@@ -1,0 +1,151 @@
+platform: mikrotik-routeros
+task: vlan-create
+summary: >-
+  Da de alta una VLAN en la tabla de VLAN del bridge de un MikroTik con RouterOS y
+  la permite etiquetada en los puertos de trunk. No convierte ningún puerto en
+  puerto de acceso.
+risk:
+  level: medium
+  reason: >-
+    En RouterOS el cambio se aplica y queda guardado en el momento, sin un paso de
+    confirmación. Un ID equivocado o un puerto mal elegido afecta a la red al
+    instante. Además, la guía solo es válida si el bridge ya tiene el filtrado de
+    VLAN activado.
+params:
+  - id: bridgeName
+    label: Nombre del bridge
+    type: text
+    example: bridge1
+    pattern: '^[A-Za-z0-9_.-]{1,32}$'
+    patternHint: Hasta 32 caracteres; letras, números, punto, guion y guion bajo.
+    help: Es el bridge al que pertenecen los puertos del switch; lo ves con /interface bridge print.
+  - id: vlanId
+    label: ID de la VLAN
+    type: vlan-id
+    example: '20'
+    help: Número de 1 a 4094.
+  - id: trunkPorts
+    label: Puertos de trunk (etiquetados)
+    type: text
+    example: sfp-sfpplus1
+    pattern: '^[A-Za-z0-9_.+-]+(,[A-Za-z0-9_.+-]+)*$'
+    patternHint: Uno o varios nombres de puerto separados por comas, sin espacios.
+    help: Puertos por los que la VLAN viaja etiquetada hacia otros switches. Usa los nombres que muestra /interface bridge port print.
+  - id: vlanName
+    label: Nombre descriptivo
+    type: text
+    example: VOZ
+    pattern: '^[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres; solo letras, números, guion y guion bajo, sin espacios.
+    help: RouterOS no tiene nombre de VLAN; se guarda como comentario de la entrada.
+  - id: backupName
+    label: Nombre de la copia de respaldo
+    type: text
+    example: crs317-antes-vlan-20
+    pattern: '^(flash/)?[A-Za-z0-9_-]{1,40}$'
+    patternHint: Hasta 40 caracteres; letras, números, guion y guion bajo, sin extensión. Puede empezar por flash/.
+    help: Si el equipo tiene carpeta flash, escribe flash/ delante del nombre.
+preflight:
+  - text: >-
+      Comprueba el nombre del bridge y que tenga vlan-filtering=yes. Si está en no,
+      detente: la tabla de VLAN no tiene efecto, y activar el filtrado es una
+      operación aparte y de riesgo alto que puede dejarte sin acceso de gestión.
+    command: /interface bridge print
+  - text: >-
+      Comprueba que el ID no esté ya en la tabla. Las entradas marcadas con D son
+      dinámicas, creadas por el PVID de algún puerto.
+    command: /interface bridge vlan print
+  - text: Anota los nombres exactos de los puertos que forman parte del bridge.
+    command: /interface bridge port print
+  - text: Guarda una copia completa de la configuración antes de tocar nada.
+    command: /system backup save name={{backupName}}
+steps:
+  - title: Activar Safe Mode
+    manual: true
+    explanation: >-
+      Pulsa Ctrl+X (o F4). El prompt pasa a mostrar SAFE. Mientras esté activo, si
+      tu sesión se corta, los cambios se deshacen solos al vencer el tiempo de
+      espera de la conexión.
+  - title: Añadir la VLAN a la tabla del bridge
+    commands:
+      - /interface bridge vlan add bridge={{bridgeName}} vlan-ids={{vlanId}} tagged={{trunkPorts}} comment={{vlanName}}
+    explanation: >-
+      Crea la entrada de la VLAN {{vlanId}} en el bridge {{bridgeName}} y la permite
+      etiquetada en {{trunkPorts}}. El cambio se aplica en el momento.
+    warning: >-
+      Usa una entrada por VLAN. Agrupar varias VLAN en una misma entrada junto con
+      puertos sin etiquetar puede hacer que el tráfico de una salga por el puerto de
+      acceso de otra.
+    breakdown:
+      - token: /interface bridge vlan add
+        meaning: Añade una entrada a la tabla de VLAN del bridge.
+      - token: bridge={{bridgeName}}
+        meaning: Bridge al que pertenece la entrada.
+      - token: vlan-ids={{vlanId}}
+        meaning: ID de la VLAN, de 1 a 4094.
+      - token: tagged={{trunkPorts}}
+        meaning: Puertos por los que la VLAN sale con etiqueta 802.1Q, separados por comas.
+      - token: comment={{vlanName}}
+        meaning: Texto libre para reconocer la entrada; no tiene efecto en el tráfico.
+  - title: Verificar antes de salir de Safe Mode
+    manual: true
+    explanation: >-
+      Haz las comprobaciones de la sección Verificación sin salir de Safe Mode y
+      confirma que sigues teniendo acceso de gestión.
+  - title: Salir de Safe Mode conservando el cambio
+    manual: true
+    explanation: >-
+      Pulsa Ctrl+X de nuevo. El cambio queda guardado; en RouterOS no hay un comando
+      equivalente a write memory. Si algo no está bien, pulsa Ctrl+D en su lugar
+      para salir deshaciendo lo hecho.
+verification:
+  - command: /interface bridge vlan print
+    expect: >-
+      Una entrada no dinámica con bridge {{bridgeName}} y VLAN-IDS {{vlanId}}. En
+      CURRENT-TAGGED aparecen los puertos de {{trunkPorts}} que tengan enlace
+      activo.
+  - command: /interface bridge port print
+    expect: Los puertos del bridge siguen con la marca H (hw-offload) como antes del cambio.
+rollback:
+  summary: >-
+    Dentro de Safe Mode, Ctrl+D deshace todo. Fuera de Safe Mode, se quita la
+    entrada creada.
+  steps:
+    - title: Si sigues en Safe Mode
+      manual: true
+      explanation: Pulsa Ctrl+D. Sale de Safe Mode deshaciendo los cambios hechos en él.
+    - title: Si ya saliste de Safe Mode
+      commands:
+        - /interface bridge vlan remove [find vlan-ids={{vlanId}} dynamic=no]
+      explanation: >-
+        Quita de la tabla la entrada de la VLAN {{vlanId}}. El tráfico de esa VLAN
+        deja de pasar en el momento.
+      warning: Comprueba antes con /interface bridge vlan print que esa entrada es la que creaste.
+    - title: 'Alternativa: deshacer la última acción'
+      commands:
+        - /undo
+      explanation: Revierte la última acción de configuración. Mira primero cuál es con /system history print.
+  lockoutRecovery: >-
+    Añadir una VLAN nueva a los trunks no debería cortar la gestión. Si la sesión se
+    corta con Safe Mode activo, espera unos 9 minutos: los cambios se deshacen
+    solos. Si ya habías salido de Safe Mode, conéctate por consola y quita la
+    entrada o carga la copia guardada antes de empezar.
+sources:
+  - title: RouterOS — Bridge VLAN Table
+    url: https://help.mikrotik.com/docs/display/ROS/Bridge+VLAN+Table
+  - title: RouterOS — Bridging and Switching (propiedades de bridge vlan y de los puertos)
+    url: https://help.mikrotik.com/docs/display/ROS/Bridging+and+Switching
+  - title: RouterOS — Configuration Management (Safe Mode y undo)
+    url: https://help.mikrotik.com/docs/display/ROS/Configuration+Management
+status:
+  level: unverified
+  reviewed: '2026-10-13'
+  firmware: RouterOS 7
+  notes: >-
+    Marcada sin verificar porque el comando de vuelta atrás no está confirmado.
+    bridge vlan add, sus propiedades y Safe Mode sí están contrastados con la
+    documentación oficial. No aparecen en las páginas consultadas, y hay que
+    confirmarlos en un equipo: la forma exacta de remove con find y dynamic=no, el
+    uso de comment= en esta entrada y los nombres de puerto del CRS317. Tampoco se
+    pudo consultar la página específica de los switches CRS3xx. Falta probar la guía
+    en un equipo real.

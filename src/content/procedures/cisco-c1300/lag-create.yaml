@@ -1,0 +1,165 @@
+platform: cisco-c1300
+task: lag-create
+summary: >-
+  Crea un port-channel con LACP en un Cisco Catalyst 1300 con dos puertos libres y
+  lo deja como trunk con su VLAN nativa y sus VLAN permitidas.
+risk:
+  level: high
+  reason: >-
+    Una agregación mal emparejada con el otro extremo puede formar un bucle de capa
+    2, y los puertos que entran en el port-channel dejan de funcionar como puertos
+    sueltos.
+params:
+  - id: poId
+    label: Número del port-channel
+    type: number
+    min: 1
+    max: 8
+    example: '1'
+    help: La guía oficial no indica el máximo; comprueba los disponibles con show interfaces port-channel.
+  - id: port1
+    label: Primer puerto miembro
+    type: text
+    example: gi1/0/47
+    pattern: '^(gi|te|tw|fi)\d+/0/\d+$'
+    patternHint: Tipo y número en formato unidad/0/puerto, por ejemplo gi1/0/47.
+  - id: port2
+    label: Segundo puerto miembro
+    type: text
+    example: gi1/0/48
+    pattern: '^(gi|te|tw|fi)\d+/0/\d+$'
+    patternHint: Tipo y número en formato unidad/0/puerto, por ejemplo gi1/0/48.
+  - id: nativeVlanId
+    label: VLAN nativa
+    type: vlan-id
+    example: '1'
+  - id: allowedVlans
+    label: VLAN permitidas
+    type: text
+    example: 1,20,30-35
+    pattern: '^\d{1,4}(-\d{1,4})?(,\d{1,4}(-\d{1,4})?)*$'
+    patternHint: IDs separados por comas y rangos con guion, sin espacios; por ejemplo 1,20,30-35.
+    help: Es la lista completa. Incluye la VLAN nativa y la de gestión si tienen que pasar por este enlace.
+preflight:
+  - text: Comprueba qué port-channels existen y que el número elegido está libre.
+    command: show interfaces port-channel
+  - text: >-
+      Confirma que los dos puertos están libres y sin enlace. Si alguno está en uso,
+      detente.
+    command: show interfaces status
+  - text: Guarda la configuración actual del primer puerto por si hay que rehacerla.
+    command: show running-config interface {{port1}}
+  - text: Guarda también la del segundo puerto.
+    command: show running-config interface {{port2}}
+  - text: Confirma que todas las VLAN de la lista existen.
+    command: show vlan
+  - text: >-
+      No conectes los dos cables hasta que el otro extremo también tenga su
+      agregación con LACP configurada. No ejecutes write memory hasta verificar.
+steps:
+  - title: Añadir el primer puerto al port-channel
+    commands:
+      - configure terminal
+      - interface {{port1}}
+      - channel-group {{poId}} mode auto
+    explanation: >-
+      Asocia el puerto al port-channel {{poId}} usando LACP para negociar con el
+      otro extremo.
+    breakdown:
+      - token: channel-group {{poId}}
+        meaning: Port-channel al que se une el puerto.
+      - token: mode auto
+        meaning: El puerto se une como resultado de la negociación LACP. Con mode on se une de forma estática, sin LACP.
+  - title: Añadir el segundo puerto
+    commands:
+      - interface {{port2}}
+      - channel-group {{poId}} mode auto
+    explanation: Asocia el segundo puerto al mismo port-channel.
+  - title: Configurar el port-channel como trunk
+    commands:
+      - interface po{{poId}}
+      - switchport mode trunk
+      - switchport trunk native vlan {{nativeVlanId}}
+      - switchport trunk allowed vlan {{allowedVlans}}
+    explanation: >-
+      Entra en la interfaz lógica po{{poId}} y define en ella el modo, la VLAN
+      nativa y las VLAN permitidas. La configuración de VLAN va en el port-channel,
+      no en cada puerto.
+    warning: switchport trunk allowed vlan sustituye la lista entera; las VLAN que no estén en ella no pasan.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve a Privileged EXEC.
+  - title: Conectar los cables y comprobar
+    manual: true
+    explanation: >-
+      Con el otro extremo ya configurado, conecta los dos cables y haz las
+      comprobaciones de la sección Verificación.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: >-
+      Copia la configuración en ejecución a la de arranque. El switch pide
+      confirmación antes de sobrescribirla.
+    warning: Guarda solo después de verificar que la agregación se formó.
+verification:
+  - command: show interfaces port-channel
+    expect: En la fila Po{{poId}}, los dos puertos aparecen como Active y ninguno como Inactive.
+  - command: show lacp port-channel {{poId}}
+    expect: Aparecen los datos LACP del port-channel y del equipo del otro extremo.
+  - command: show interfaces switchport po{{poId}}
+    expect: Modo trunk, VLAN nativa {{nativeVlanId}} y VLAN del trunk exactamente {{allowedVlans}}.
+rollback:
+  summary: >-
+    Antes de sacar los puertos del port-channel hay que apagarlos o quitar los
+    cables: como puertos sueltos, con dos cables hacia el mismo switch formarían un
+    bucle.
+  steps:
+    - title: Apagar los puertos miembro
+      commands:
+        - configure terminal
+        - interface {{port1}}
+        - shutdown
+        - interface {{port2}}
+        - shutdown
+      explanation: Corta el enlace por los dos puertos antes de deshacer la agregación.
+    - title: Sacar los puertos del port-channel
+      commands:
+        - interface {{port1}}
+        - no channel-group
+        - interface {{port2}}
+        - no channel-group
+        - end
+      explanation: >-
+        Quita los dos puertos del port-channel. Después reaplica la configuración
+        que guardaste en Antes de empezar y habilita cada puerto con no shutdown
+        solo cuando ya no haya dos cables hacia el mismo switch.
+    - title: 'Alternativa: no guardar y reiniciar'
+      commands:
+        - reload
+      explanation: >-
+        Si todavía no ejecutaste write memory, un reinicio arranca con la
+        configuración de arranque, sin la agregación.
+      warning: El reinicio corta todo el tráfico del switch durante el arranque.
+  lockoutRecovery: >-
+    Si la red se vuelve inestable o pierdes el acceso justo después de conectar los
+    cables, sospecha de un bucle: desconecta uno de los dos cables de la agregación.
+    Después entra por consola y revisa la configuración de los dos extremos.
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — Port Channel Commands
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/port-channel-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — LACP Commands
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/lacp-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — VLAN Commands (switchport)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/vlan-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — Ethernet Configuration Commands
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/ethernet-configuration-commands.html
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: >-
+    channel-group, los comandos switchport sobre port-channel y los show están
+    contrastados con la guía oficial. La guía no indica cuántos port-channels ni
+    cuántos miembros admite el equipo, ni qué pasa con la configuración de VLAN de
+    un puerto al entrar o salir de un port-channel. Falta probarla en un C1300 real.

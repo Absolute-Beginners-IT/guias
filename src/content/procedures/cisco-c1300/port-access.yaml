@@ -1,0 +1,115 @@
+platform: cisco-c1300
+task: port-access
+summary: >-
+  Configura un puerto de un Cisco Catalyst 1300 como puerto de acceso de una VLAN y
+  guarda el cambio.
+risk:
+  level: medium
+  reason: >-
+    El equipo conectado al puerto cambia de red en el momento. Si el puerto es el que
+    usas para gestionar el switch o es un enlace a otro switch, el cambio corta ese
+    acceso.
+params:
+  - id: interfaceId
+    label: Puerto
+    type: text
+    example: gi1/0/5
+    pattern: '^(gi|te|tw|fi)\d+/0/\d+$'
+    patternHint: Tipo y número en formato unidad/0/puerto, por ejemplo gi1/0/5 o te1/0/1.
+  - id: vlanId
+    label: VLAN de destino
+    type: vlan-id
+    example: '20'
+    help: Tiene que existir ya en el switch.
+  - id: previousVlanId
+    label: VLAN que tiene ahora el puerto
+    type: vlan-id
+    example: '1'
+    help: La ves en la comprobación previa; hace falta para poder volver atrás.
+preflight:
+  - text: >-
+      Confirma que la VLAN de destino existe. Si asignas una VLAN que no existe, el
+      puerto queda sin pertenecer a ninguna.
+    command: show vlan tag {{vlanId}}
+  - text: >-
+      Mira cómo está el puerto ahora y anota su modo y su VLAN de acceso. Si está en
+      modo trunk, detente: esta guía lo convertiría en puerto de acceso.
+    command: show interfaces switchport {{interfaceId}}
+  - text: Guarda la configuración actual del puerto por si hay que rehacerla.
+    command: show running-config interface {{interfaceId}}
+  - text: >-
+      Comprueba que no es el puerto por el que estás conectado ni un enlace hacia
+      otro switch. No ejecutes write memory hasta verificar el cambio.
+steps:
+  - title: Entrar en la configuración del puerto
+    commands:
+      - configure terminal
+      - interface {{interfaceId}}
+    explanation: Pasa a configuración global y entra en el puerto. El prompt termina en (config-if)#.
+  - title: Poner el puerto en modo acceso
+    commands:
+      - switchport mode access
+    explanation: >-
+      Define el puerto como puerto de acceso. Es el modo de fábrica, así que en un
+      puerto sin tocar no cambia nada.
+  - title: Asignar la VLAN de acceso
+    commands:
+      - switchport access vlan {{vlanId}}
+    explanation: Saca el puerto de su VLAN anterior y lo coloca en la VLAN {{vlanId}}.
+    warning: El equipo conectado cambia de red al ejecutar este comando.
+    breakdown:
+      - token: switchport access vlan
+        meaning: Define la VLAN del puerto cuando está en modo acceso.
+      - token: '{{vlanId}}'
+        meaning: VLAN de destino. La palabra none deja el puerto sin VLAN.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve a Privileged EXEC.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: >-
+      Copia la configuración en ejecución a la de arranque. El switch pide
+      confirmación antes de sobrescribirla.
+    warning: Verifica primero (sección siguiente) y guarda después.
+verification:
+  - command: show interfaces switchport {{interfaceId}}
+    expect: Modo administrativo y operativo access, y VLAN de acceso {{vlanId}}.
+  - command: show vlan tag {{vlanId}}
+    expect: El puerto {{interfaceId}} aparece entre los puertos sin etiqueta de la VLAN {{vlanId}}.
+rollback:
+  summary: Devuelve el puerto a la VLAN que tenía.
+  steps:
+    - title: Volver a la VLAN anterior
+      commands:
+        - configure terminal
+        - interface {{interfaceId}}
+        - switchport access vlan {{previousVlanId}}
+        - end
+      explanation: Asigna de nuevo el puerto a la VLAN {{previousVlanId}}.
+    - title: Si ya habías guardado con write memory
+      commands:
+        - write memory
+      explanation: Guarda de nuevo para que la configuración de arranque también quede como antes.
+  lockoutRecovery: >-
+    Si el puerto era tu vía de gestión y perdiste la conexión, entra por el puerto
+    de consola y deshaz el cambio. Si todavía no habías ejecutado write memory, un
+    reinicio del switch arranca con la configuración anterior. Para hacer este
+    cambio en remoto con red de seguridad, programa antes un reinicio con reload in
+    (ver la ficha del equipo).
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — VLAN Commands (switchport)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/vlan-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — Ethernet Configuration Commands (interface)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/ethernet-configuration-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — File System Commands (show running-config, write memory)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/file-system-commands.html
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: >-
+    Sintaxis contrastada con la guía oficial de la CLI. Los textos exactos de la
+    salida de show interfaces switchport no se copiaron de la guía; la verificación
+    describe qué campos mirar. Falta probarla en un C1300 real.

@@ -1,0 +1,126 @@
+platform: aruba-aoscx
+task: config-restore
+summary: >-
+  Aplica un checkpoint anterior sobre la configuración en ejecución de un Aruba CX
+  6100, protegido con el modo checkpoint auto para que el switch se recupere solo si
+  pierdes el acceso.
+risk:
+  level: high
+  reason: >-
+    Sustituye toda la configuración en ejecución. Si el checkpoint tiene otra
+    configuración de gestión, puedes quedarte sin acceso remoto en el momento.
+params:
+  - id: checkpointName
+    label: Checkpoint a restaurar
+    type: text
+    example: antes-vlan-20
+    pattern: '^[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres; letras, números, guion y guion bajo.
+    help: Tiene que existir en el switch; lo ves con show checkpoint.
+  - id: currentCheckpoint
+    label: Nombre para guardar el estado actual
+    type: text
+    example: antes-de-restaurar
+    pattern: '^(?!CPC)[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres; letras, números, guion y guion bajo; no puede empezar por CPC.
+    help: Copia del estado de ahora, para poder volver si la restauración no era lo que querías.
+  - id: minutes
+    label: Minutos de margen del modo auto
+    type: number
+    min: 1
+    max: 60
+    example: '10'
+    help: Tiempo que tienes para comprobar que todo funciona antes de que el switch deshaga el cambio solo.
+preflight:
+  - text: Confirma que el checkpoint que vas a restaurar existe y mira su fecha.
+    command: show checkpoint
+  - text: Guarda el estado actual, aunque esté mal, para poder volver a él.
+    command: copy running-config checkpoint {{currentCheckpoint}}
+  - text: Ten a mano acceso por consola y avisa del posible corte.
+steps:
+  - title: Activar el modo checkpoint auto
+    commands:
+      - checkpoint auto {{minutes}}
+    explanation: >-
+      Abre una ventana de {{minutes}} minutos. Si no confirmas antes de que venza, el
+      switch restaura la configuración que tenía en este momento. Es lo que te
+      protege si la restauración te deja sin acceso.
+    breakdown:
+      - token: checkpoint auto
+        meaning: Guarda temporalmente la configuración actual y arranca la cuenta atrás.
+      - token: '{{minutes}}'
+        meaning: Duración de la ventana, de 1 a 60 minutos.
+  - title: Aplicar el checkpoint
+    commands:
+      - checkpoint rollback {{checkpointName}}
+    explanation: >-
+      Aplica la configuración del checkpoint sobre la que está en ejecución. El
+      switch responde Success. A partir de aquí la red funciona con la configuración
+      restaurada.
+    warning: Si tu sesión se corta en este paso, no toques nada y espera a que venza el modo auto.
+    breakdown:
+      - token: checkpoint rollback
+        meaning: Sustituye la configuración en ejecución por la de un checkpoint.
+      - token: '{{checkpointName}}'
+        meaning: Checkpoint de origen. También admite startup-config para volver a la configuración de arranque.
+  - title: Comprobar que todo funciona
+    manual: true
+    explanation: >-
+      Antes de confirmar, verifica que sigues teniendo acceso de gestión y que la
+      red responde como esperabas (sección Verificación). Hazlo dentro de la
+      ventana de {{minutes}} minutos.
+  - title: Confirmar el cambio
+    commands:
+      - checkpoint auto confirm
+    explanation: >-
+      Termina el modo auto y deja la configuración restaurada como definitiva en
+      ejecución. El switch crea además un checkpoint cuyo nombre empieza por AUTO.
+    warning: Si no ejecutas este comando a tiempo, el switch vuelve solo al estado anterior.
+  - title: Guardar en la configuración de arranque
+    commands:
+      - write memory
+    explanation: Copia la configuración restaurada a la de arranque para que sobreviva a un reinicio.
+verification:
+  - command: show running-config
+    expect: La configuración coincide con la del momento en que se creó {{checkpointName}}.
+  - command: show vlan
+    expect: Las VLAN y sus puertos son los que esperabas después de restaurar.
+rollback:
+  summary: >-
+    Mientras el modo auto esté activo, la vuelta atrás es no confirmar. Si ya
+    confirmaste, vuelve al checkpoint que guardaste antes de empezar.
+  steps:
+    - title: Si todavía no confirmaste
+      manual: true
+      explanation: >-
+        No ejecutes checkpoint auto confirm. Cuando venza la ventana, el switch
+        restaura solo la configuración que tenía antes de la restauración.
+    - title: Si ya confirmaste
+      commands:
+        - checkpoint rollback {{currentCheckpoint}}
+        - write memory
+      explanation: >-
+        Vuelve al estado que guardaste en Antes de empezar y lo deja también en la
+        configuración de arranque.
+  lockoutRecovery: >-
+    Si pierdes el acceso con el modo auto activo, espera: al vencer la ventana el
+    switch recupera la configuración anterior y vas a poder entrar de nuevo. Si ya
+    habías confirmado, entra por el puerto de consola y aplica el checkpoint que
+    guardaste antes de empezar.
+sources:
+  - title: AOS-CX 10.15 Fundamentals Guide (4100i, 6000, 6100) — checkpoint rollback
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/Chk_cmds/che-rol.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — checkpoint auto
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/Chk_cmds/che-aut.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — checkpoint auto confirm
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/Chk_cmds/che-aut-con.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — write memory
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/Chk_cmds/wri-mem.htm
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: AOS-CX 10.15
+  notes: >-
+    Cada comando está contrastado con la documentación oficial. La documentación no
+    describe de forma explícita el uso de checkpoint rollback dentro del modo auto;
+    prueba la secuencia completa en un equipo de laboratorio antes de confiar en ella.

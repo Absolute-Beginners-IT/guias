@@ -1,0 +1,19 @@
+id: ntp-client
+title: Sincronizar la hora con NTP
+group: monitoring
+order: 1
+summary: Hace que el switch tome la hora de un servidor de tiempo, para que sus registros y alarmas tengan la hora correcta.
+explanation: >-
+  Un switch sin hora correcta genera registros con fechas falsas, y entonces es
+  imposible cruzar lo que pasó en él con lo que pasó en el resto de la red. NTP
+  (Network Time Protocol) sincroniza el reloj con un servidor de tiempo. Lo habitual
+  es usar el servidor de tiempo interno de la empresa, normalmente un controlador
+  de dominio o el cortafuegos. Es lo primero que conviene configurar antes de
+  syslog o SNMP.
+risks:
+  - Configurar NTP no corta el tráfico ni el acceso.
+  - Un servidor equivocado o inalcanzable deja el reloj sin sincronizar, sin dar error visible.
+  - La hora interna suele estar en UTC; la zona horaria solo cambia cómo se muestra.
+prerequisites:
+  - Conocer la IP o el nombre del servidor de tiempo de la empresa.
+  - El switch tiene IP de gestión y llega a ese servidor.

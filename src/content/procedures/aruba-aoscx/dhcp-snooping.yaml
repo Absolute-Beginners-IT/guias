@@ -1,0 +1,170 @@
+platform: aruba-aoscx
+task: dhcp-snooping
+summary: >-
+  Activa DHCP snooping en un Aruba CX 6100, globalmente y en una VLAN, y marca como
+  confiable el puerto por el que llega el servidor DHCP legítimo.
+risk:
+  level: medium
+  reason: >-
+    Si el puerto hacia el servidor DHCP o hacia el switch troncal no queda como
+    confiable, los equipos de la VLAN dejan de recibir dirección al renovarla. El
+    error puede tardar horas en notarse, porque los equipos que ya tienen IP siguen
+    funcionando hasta que la renuevan.
+params:
+  - id: vlanId
+    label: VLAN a proteger
+    type: vlan-id
+    example: '120'
+    help: Empieza por una sola VLAN, mejor una de pruebas o con pocos equipos.
+  - id: trustedPort
+    label: Puerto confiable (hacia el servidor DHCP)
+    type: text
+    example: 1/1/51
+    pattern: '^\d+/\d+/\d+$'
+    patternHint: Formato miembro/slot/puerto, por ejemplo 1/1/51.
+    help: >-
+      El uplink por el que llegan las respuestas del servidor DHCP, directamente o a
+      través de otro switch. Si hay dos uplinks, repite el paso de confianza en el
+      segundo.
+  - id: checkpointName
+    label: Nombre del checkpoint de respaldo
+    type: text
+    example: antes-dhcp-snooping
+    pattern: '^(?!CPC)[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres; letras, números, guion y guion bajo; no puede empezar por CPC.
+preflight:
+  - text: >-
+      Mira si DHCP snooping ya está activo, en qué VLAN y qué puertos son confiables.
+      En la versión 10.14 la palabra dhcpv4-snooping pasó a ser dhcp-snooping; si el
+      switch no acepta el comando, revisa la versión de firmware.
+    command: show dhcp-snooping
+  - text: >-
+      Identifica el puerto por el que llega el servidor DHCP de la VLAN {{vlanId}}.
+      Mira en qué puertos está la VLAN y cuál es el uplink.
+    command: show vlan {{vlanId}}
+  - text: Revisa el uplink para confirmar que es el enlace correcto y que lleva la VLAN.
+    command: show interface {{trustedPort}}
+  - text: Guarda un checkpoint con la configuración actual.
+    command: copy running-config checkpoint {{checkpointName}}
+  - text: >-
+      Ten a mano un equipo de prueba en la VLAN {{vlanId}} para forzar la renovación
+      de su dirección al terminar.
+steps:
+  - title: Entrar en modo configuración
+    commands:
+      - config
+    explanation: Pasa a configuración global. El prompt cambia a switch(config)#.
+  - title: Marcar el puerto confiable
+    commands:
+      - interface {{trustedPort}}
+      - dhcp-snooping trust
+      - exit
+    explanation: >-
+      Se hace antes de activar la función, para que las respuestas del servidor
+      legítimo nunca se descarten. Por defecto todos los puertos son no confiables.
+    breakdown:
+      - token: dhcp-snooping trust
+        meaning: >-
+          Acepta respuestas de servidor DHCP (OFFER, ACK, NAK) en este puerto. En los
+          no confiables se descartan.
+  - title: Activar DHCP snooping en el switch
+    commands:
+      - dhcp-snooping
+    explanation: >-
+      Enciende la función a nivel global. Por sí solo no filtra ninguna VLAN; hace
+      falta el paso siguiente.
+  - title: Activar DHCP snooping en la VLAN
+    commands:
+      - vlan {{vlanId}}
+      - dhcp-snooping
+      - exit
+    explanation: >-
+      Desde ahora el switch inspecciona el DHCP de la VLAN {{vlanId}}: descarta las
+      respuestas de servidor que lleguen por puertos no confiables y anota qué IP
+      recibe cada equipo y en qué puerto.
+    breakdown:
+      - token: vlan {{vlanId}}
+        meaning: Entra en el contexto de la VLAN. El prompt queda en switch(config-vlan-{{vlanId}})#.
+      - token: dhcp-snooping
+        meaning: Activa la inspección solo en esta VLAN.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve al modo Manager.
+  - title: Probar con un equipo
+    manual: true
+    explanation: >-
+      En el equipo de prueba de la VLAN {{vlanId}}, libera y renueva la dirección (en
+      Windows, ipconfig /release y después ipconfig /renew). Tiene que recibir una
+      dirección del servidor legítimo. Si no la recibe, aplica la vuelta atrás antes
+      de que otros equipos renueven.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: Copia la configuración en ejecución a la de arranque.
+verification:
+  - command: show dhcp-snooping
+    expect: >-
+      dhcp-snooping: Yes, la VLAN {{vlanId}} en Enabled VLANs y el puerto
+      {{trustedPort}} con Trust Yes.
+  - command: show dhcp-snooping binding
+    expect: >-
+      Después de la renovación, el equipo de prueba aparece con su MAC, su IP, la
+      VLAN {{vlanId}} y su puerto.
+rollback:
+  summary: >-
+    Desactiva DHCP snooping en la VLAN, o en todo el switch. Al desactivarlo se borra
+    la tabla de asignaciones aprendidas.
+  steps:
+    - title: Desactivarlo en la VLAN
+      commands:
+        - config
+        - vlan {{vlanId}}
+        - no dhcp-snooping
+        - exit
+        - end
+        - write memory
+      explanation: >-
+        La VLAN {{vlanId}} deja de inspeccionarse. La confianza del puerto puede
+        quedarse: no tiene efecto sin snooping.
+    - title: Desactivarlo en todo el switch
+      commands:
+        - config
+        - no dhcp-snooping
+        - end
+        - write memory
+      explanation: Apaga la función en todas las VLAN y borra todas las asignaciones aprendidas.
+    - title: 'Alternativa: volver al checkpoint'
+      commands:
+        - checkpoint rollback {{checkpointName}}
+        - write memory
+      explanation: Vuelve al estado guardado antes de empezar y lo deja también en la configuración de arranque.
+  lockoutRecovery: >-
+    DHCP snooping no corta el SSH ni la web si el switch tiene IP fija. Si la IP de
+    gestión del switch la da un servidor DHCP por la VLAN {{vlanId}} y la pierdes,
+    entra por la consola y desactiva la función con no dhcp-snooping.
+sources:
+  - title: AOS-CX 10.15 IP Services Guide (4100i, 6000, 6100) — DHCP snooping
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/ip_services_4100i-6000-6100/Content/Chp_DHCP_snoop/dhc-sno-fl-ml-xl-10.htm
+  - title: AOS-CX 10.15 IP Services Guide — dhcp-snooping
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/ip_services_4100i-6000-6100/Content/Chp_DHCP_snoop/Dv4Snoop_cmds/dhc-sno-840-10-cpe.htm
+  - title: AOS-CX 10.15 IP Services Guide — dhcp-snooping (en contexto config-vlan)
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/ip_services_4100i-6000-6100/Content/Chp_DHCP_snoop/Dv4Snoop_cmds/dhc-sno-in-con-vla-con-840-10cpe.htm
+  - title: AOS-CX 10.15 IP Services Guide — dhcp-snooping trust
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/ip_services_4100i-6000-6100/Content/Chp_DHCP_snoop/Dv4Snoop_cmds/dhc-sno-tru-840-10-cpe.htm
+  - title: AOS-CX 10.15 IP Services Guide — show dhcp-snooping
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/ip_services_4100i-6000-6100/Content/Chp_DHCP_snoop/Dv4Snoop_cmds/sho-dhc-sno-840-10.htm
+  - title: AOS-CX 10.15 IP Services Guide — show dhcp-snooping binding
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/ip_services_4100i-6000-6100/Content/Chp_DHCP_snoop/Dv4Snoop_cmds/sho-dhc-sno-bin-840-10-cpe.htm
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: AOS-CX 10.15
+  notes: >-
+    Todos los comandos están en la guía de IP Services del 6100 para la 10.15, con
+    la palabra dhcp-snooping que reemplazó a dhcpv4-snooping en la 10.14. El ejemplo
+    oficial de show dhcp-snooping muestra la inserción de la opción 82 activada: si
+    el servidor DHCP rechaza esas peticiones, los equipos no reciben dirección. Este
+    runbook no cambia la opción 82 porque el comando para hacerlo no se consultó. No
+    se configuran servidores autorizados (dhcp-snooping authorized-server). Falta
+    probar este runbook en un 6100.

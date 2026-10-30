@@ -1,0 +1,61 @@
+platform: ruijie-reyee
+task: port-access
+summary: >-
+  Deja un puerto de un Ruijie NBS3200 como puerto de acceso de una VLAN desde su
+  interfaz web.
+risk:
+  level: medium
+  reason: >-
+    El equipo conectado cambia de red en el momento. Si el puerto es tu vía de
+    gestión o un enlace a otro switch, el cambio corta ese acceso.
+params:
+  - id: port
+    label: Puerto
+    type: text
+    example: Gi14
+    pattern: '^[A-Za-z]{2}\d{1,2}$'
+    patternHint: Nombre del puerto tal como aparece en el panel, por ejemplo Gi14.
+  - id: vlanId
+    label: VLAN de destino
+    type: vlan-id
+    example: '20'
+    help: Tiene que existir ya en VLAN List.
+  - id: previousVlanId
+    label: VLAN que tiene ahora el puerto
+    type: vlan-id
+    example: '1'
+preflight:
+  - text: >-
+      En Local Device > VLAN > Port List, mira el modo y la VLAN actuales de
+      {{port}}. Si está en modo Trunk, detente: esta guía lo convertiría en acceso.
+  - text: Comprueba que {{port}} no es el puerto por el que llegas al switch ni un enlace hacia otro switch.
+steps:
+  - title: Abrir la lista de puertos
+    manual: true
+    explanation: Ve a Local Device > VLAN > Port List.
+  - title: Configurar el puerto como acceso
+    manual: true
+    explanation: >-
+      Pulsa Edit en la fila de {{port}}, elige el modo Access port, selecciona la
+      Access VLAN {{vlanId}} y pulsa OK. Para varios puertos a la vez está Batch Edit.
+    warning: El equipo conectado cambia de red al pulsar OK.
+verification:
+  - expect: En Port List, {{port}} aparece en modo Access con la VLAN {{vlanId}}.
+rollback:
+  summary: Devuelve el puerto a la VLAN que tenía.
+  steps:
+    - title: Volver a la VLAN anterior
+      manual: true
+      explanation: En Port List, pulsa Edit en {{port}}, elige la Access VLAN {{previousVlanId}} y pulsa OK.
+  lockoutRecovery: >-
+    Si el puerto era tu vía de gestión y perdiste el acceso, conéctate por otro
+    puerto de la VLAN de gestión y deshaz el cambio. Si no hay forma, el botón Reset
+    mantenido más de 5 segundos devuelve el switch a fábrica.
+sources:
+  - title: Ruijie Reyee NBS3200 V2 — ReyeeOS 2.341 Configuration Guide, apartado Configuring Port VLAN
+    url: https://reyee.ruijie.com/en-global/support/documents/slide_rg-nbs3200-24gt4xs-p-v2-nbs3200-48gt4xs-p-v2-switches-implementation-cookbook/
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: ReyeeOS 2.341
+  notes: Pasos contrastados con la guía oficial; falta probarlos en un NBS3200 real.

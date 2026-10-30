@@ -1,0 +1,18 @@
+id: vlan-create
+title: Crear una VLAN
+group: vlans-ports
+order: 1
+summary: Da de alta una VLAN nueva en el switch y le pone un nombre reconocible.
+explanation: >-
+  Una VLAN divide un switch en varias redes de capa 2 independientes: los equipos de
+  una VLAN no ven el tráfico de las demás aunque estén conectados al mismo switch.
+  Se usa para separar, por ejemplo, voz, usuarios, servidores y gestión. Crear la
+  VLAN solo la da de alta; no cambia nada en los puertos hasta que se asigna a
+  alguno como acceso o se permite en un trunk.
+risks:
+  - Crear la VLAN no interrumpe el tráfico, pero usar un ID que ya existe modifica esa VLAN en vez de crear una nueva.
+  - La VLAN tiene que existir con el mismo ID en todos los switches del camino; si falta en uno, el tráfico se corta ahí.
+  - Si el cambio no se guarda en la configuración de arranque, se pierde en el siguiente reinicio.
+prerequisites:
+  - Saber qué ID y qué nombre le corresponden según el plan de direccionamiento de la empresa.
+  - Tener acceso de administrador al switch.

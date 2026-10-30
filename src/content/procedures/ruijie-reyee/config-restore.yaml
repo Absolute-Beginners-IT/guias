@@ -1,0 +1,66 @@
+platform: ruijie-reyee
+task: config-restore
+summary: >-
+  Importa en un Ruijie NBS3200 una copia de configuración guardada antes. El switch
+  se reinicia y arranca con ella.
+risk:
+  level: high
+  reason: >-
+    El switch se reinicia al importar, así que se corta todo el tráfico durante el
+    arranque, y toda la configuración se sustituye por la de la copia.
+params: []
+preflight:
+  - text: >-
+      Haz primero una copia del estado actual con la guía Guardar una copia de la
+      configuración, aunque esté mal, para poder volver a él.
+  - text: >-
+      Comprueba que el archivo a importar es de este mismo switch o de uno del mismo
+      modelo y versión de ReyeeOS.
+  - text: Hazlo en una ventana de mantenimiento; el switch se reinicia.
+steps:
+  - title: Abrir la página de copias
+    manual: true
+    explanation: Ve a Local Device > System > Backup > Backup & Import.
+  - title: Elegir la copia
+    manual: true
+    explanation: Pulsa Browse y elige el archivo de configuración guardado en tu equipo.
+  - title: Importar
+    manual: true
+    explanation: >-
+      Pulsa Import. El switch aplica la configuración del archivo y se reinicia. No
+      cierres ni recargues el navegador mientras tanto.
+    warning: Al importar se corta todo el tráfico del switch hasta que termina de arrancar.
+  - title: Volver a entrar
+    manual: true
+    explanation: >-
+      Cuando termine de arrancar, entra de nuevo a la interfaz web. La IP de gestión
+      y la contraseña son ahora las de la copia importada.
+verification:
+  - expect: >-
+      En Local Device > Home > Basic Info, la IP de gestión y el nombre del equipo son
+      los de la copia, y en Local Device > VLAN > VLAN List están sus VLAN.
+rollback:
+  summary: La vuelta atrás es importar la copia del estado anterior que hiciste antes de empezar.
+  steps:
+    - title: Importar la copia del estado anterior
+      manual: true
+      explanation: >-
+        En Local Device > System > Backup > Backup & Import, elige con Browse la copia
+        hecha antes de empezar y pulsa Import. El switch vuelve a reiniciarse.
+      warning: Vuelve a cortar todo el tráfico durante el arranque.
+  lockoutRecovery: >-
+    Si después del reinicio no puedes entrar, prueba con la IP y la contraseña de la
+    copia importada. Si aun así no hay acceso, mantén pulsado el botón Reset del
+    panel más de 5 segundos: el switch vuelve a fábrica (10.44.77.200, contraseña
+    admin) y desde ahí importas la copia buena.
+sources:
+  - title: Ruijie Reyee NBS3200 V2 — ReyeeOS 2.341 Configuration Guide, apartados Configuration Backup and Import y Login
+    url: https://reyee.ruijie.com/en-global/support/documents/slide_rg-nbs3200-24gt4xs-p-v2-nbs3200-48gt4xs-p-v2-switches-implementation-cookbook/
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: ReyeeOS 2.341
+  notes: >-
+    Pasos contrastados con la guía oficial. La guía no indica si se puede importar
+    una copia de otro equipo o de otra versión; esta guía recomienda no hacerlo.
+    Falta probarla en un NBS3200 real.

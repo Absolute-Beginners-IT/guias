@@ -1,0 +1,183 @@
+platform: cisco-c1300
+task: port-trunk
+summary: >-
+  Configura un puerto de un Cisco Catalyst 1300 como trunk, con su VLAN nativa y su
+  lista de VLAN permitidas, usando un reinicio programado como red de seguridad.
+risk:
+  level: high
+  reason: >-
+    Un trunk suele ser un enlace entre switches: un error corta todas las VLAN que
+    pasan por él, incluida la de gestión. Además, la lista de VLAN permitidas
+    sustituye a la anterior.
+params:
+  - id: interfaceId
+    label: Puerto
+    type: text
+    example: gi1/0/48
+    pattern: '^(gi|te|tw|fi)\d+/0/\d+$'
+    patternHint: Tipo y número en formato unidad/0/puerto, por ejemplo gi1/0/48 o te1/0/1.
+  - id: nativeVlanId
+    label: VLAN nativa
+    type: vlan-id
+    example: '1'
+    help: La que recibe las tramas sin etiqueta. Tiene que ser la misma en el otro extremo.
+  - id: allowedVlans
+    label: VLAN permitidas
+    type: text
+    example: 1,20,30-35
+    pattern: '^\d{1,4}(-\d{1,4})?(,\d{1,4}(-\d{1,4})?)*$'
+    patternHint: IDs separados por comas y rangos con guion, sin espacios; por ejemplo 1,20,30-35.
+    help: Es la lista completa. Incluye la VLAN nativa y la de gestión si tienen que pasar por este enlace.
+  - id: minutes
+    label: Minutos hasta el reinicio de seguridad
+    type: number
+    min: 5
+    max: 60
+    example: '15'
+    help: Si pierdes el acceso, el switch se reinicia pasado este tiempo y arranca con la configuración guardada.
+preflight:
+  - text: Confirma que todas las VLAN de la lista existen en el switch.
+    command: show vlan
+  - text: Mira cómo está el puerto ahora.
+    command: show interfaces switchport {{interfaceId}}
+  - text: >-
+      Guarda la configuración actual del puerto: es lo que vas a tener que rehacer
+      si hay que volver atrás.
+    command: show running-config interface {{interfaceId}}
+  - text: >-
+      Confirma que la configuración de arranque es buena, porque es a la que vuelve
+      el switch si se reinicia. No tiene que haber cambios sin guardar que quieras
+      conservar.
+    command: show startup-config
+  - text: Confirma con quien administra el otro extremo la VLAN nativa y la lista de VLAN permitidas.
+steps:
+  - title: Programar el reinicio de seguridad
+    commands:
+      - reload in {{minutes}}
+    explanation: >-
+      Programa un reinicio dentro de {{minutes}} minutos y pide confirmación. Si el
+      cambio te deja sin acceso, el switch se reinicia solo y arranca con la
+      configuración de arranque, que todavía no tiene el cambio.
+    warning: >-
+      Si olvidas cancelarlo, el switch se reinicia y corta todo el tráfico. Si puedes
+      hacer el cambio por consola, salta este paso y el de cancelar.
+    breakdown:
+      - token: reload in
+        meaning: Programa un reinicio diferido en vez de reiniciar ahora.
+      - token: '{{minutes}}'
+        meaning: Minutos de espera. También admite el formato horas:minutos.
+  - title: Entrar en la configuración del puerto
+    commands:
+      - configure terminal
+      - interface {{interfaceId}}
+    explanation: Pasa a configuración global y entra en el puerto. El prompt termina en (config-if)#.
+  - title: Poner el puerto en modo trunk
+    commands:
+      - switchport mode trunk
+    explanation: >-
+      Define el puerto como trunk. Al cambiar de modo, el puerto pasa a tener la
+      configuración de ese modo; por defecto un trunk pertenece a todas las VLAN
+      creadas.
+    warning: Desde este paso el puerto deja de ser un puerto de acceso.
+  - title: Definir la VLAN nativa
+    commands:
+      - switchport trunk native vlan {{nativeVlanId}}
+    explanation: Indica qué VLAN recibe las tramas que llegan sin etiqueta.
+    breakdown:
+      - token: switchport trunk native vlan
+        meaning: Define la VLAN nativa; solo tiene efecto con el puerto en modo trunk.
+      - token: '{{nativeVlanId}}'
+        meaning: VLAN nativa. La palabra none deja el trunk sin VLAN nativa.
+  - title: Definir las VLAN permitidas
+    commands:
+      - switchport trunk allowed vlan {{allowedVlans}}
+    explanation: >-
+      Sustituye toda la lista de VLAN del trunk por la indicada. Las que no estén
+      en la lista dejan de pasar.
+    warning: >-
+      Este comando reemplaza la lista, no la amplía. Para añadir o quitar VLAN de un
+      trunk que ya funciona se usan las formas add y remove.
+    breakdown:
+      - token: switchport trunk allowed vlan
+        meaning: Define qué VLAN transporta el trunk.
+      - token: '{{allowedVlans}}'
+        meaning: Lista completa de VLAN. Con add o remove delante se modifica la lista existente; all las permite todas.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve a Privileged EXEC.
+  - title: Comprobar que todo funciona
+    manual: true
+    explanation: >-
+      Haz las comprobaciones de la sección Verificación y confirma que sigues
+      teniendo acceso de gestión y que los equipos de cada VLAN se ven a través del
+      enlace, antes de que pasen los {{minutes}} minutos.
+  - title: Cancelar el reinicio de seguridad
+    commands:
+      - reload cancel
+    explanation: Cancela el reinicio programado. El switch responde Reload cancelled.
+    warning: No sigas sin ejecutar este paso; comprueba después con show reload que no queda ningún reinicio pendiente.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: >-
+      Copia la configuración en ejecución a la de arranque. El switch pide
+      confirmación antes de sobrescribirla.
+verification:
+  - command: show interfaces switchport {{interfaceId}}
+    expect: Modo trunk, VLAN nativa {{nativeVlanId}} y VLAN del trunk exactamente {{allowedVlans}}.
+  - command: show vlan
+    expect: El puerto {{interfaceId}} aparece en cada VLAN permitida, etiquetado salvo en la nativa.
+  - command: show reload
+    expect: Después de cancelar, no hay ningún reinicio programado.
+rollback:
+  summary: >-
+    Antes de guardar, la vuelta atrás es rehacer la configuración anterior del
+    puerto o dejar que el reinicio de seguridad actúe. Después de guardar, hay que
+    rehacerla a mano.
+  steps:
+    - title: Si perdiste el acceso y el reinicio sigue programado
+      manual: true
+      explanation: >-
+        Espera. Al cumplirse el tiempo el switch se reinicia y arranca con la
+        configuración de arranque, sin el cambio. El reinicio corta el tráfico
+        durante el arranque.
+    - title: Devolver el puerto a sus valores de fábrica
+      commands:
+        - configure terminal
+        - interface {{interfaceId}}
+        - no switchport trunk allowed vlan
+        - no switchport trunk native vlan
+        - no switchport mode
+        - end
+      explanation: >-
+        Quita la lista de VLAN, la VLAN nativa y el modo, y deja el puerto en modo
+        acceso. Después reaplica las líneas que guardaste en Antes de empezar con
+        show running-config interface {{interfaceId}}.
+      warning: Hasta que reapliques su configuración anterior, el puerto queda como puerto de acceso de fábrica.
+    - title: Si ya habías guardado con write memory
+      commands:
+        - write memory
+      explanation: Una vez rehecha la configuración anterior del puerto, guarda de nuevo.
+  lockoutRecovery: >-
+    Si pierdes el acceso con el reinicio programado, espera a que el switch se
+    reinicie y vuelva con la configuración anterior. Si no lo habías programado o ya
+    lo cancelaste, entra por el puerto de consola y rehaz la configuración del
+    puerto.
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — VLAN Commands (switchport)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/vlan-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — System Management Commands (reload)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/system-management-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — Ethernet Configuration Commands (interface)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/ethernet-configuration-commands.html
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: >-
+    Sintaxis contrastada con la guía oficial de la CLI. La guía no afirma de forma
+    literal que un reinicio descarte los cambios sin guardar; el reinicio de
+    seguridad se apoya en que el switch arranca con la configuración de arranque.
+    Prueba la secuencia completa en un equipo de laboratorio antes de usarla en
+    producción.

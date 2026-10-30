@@ -1,0 +1,93 @@
+platform: mikrotik-routeros
+task: config-backup
+summary: >-
+  Guarda la configuración de un MikroTik con RouterOS de dos formas: una copia
+  binaria completa (.backup) y una exportación en texto (.rsc), y las saca del
+  equipo.
+risk:
+  level: low
+  reason: Crear los archivos no modifica la configuración ni afecta al tráfico.
+params:
+  - id: backupName
+    label: Nombre de la copia
+    type: text
+    example: crs317-antes-vlan-20
+    pattern: '^(flash/)?[A-Za-z0-9_-]{1,40}$'
+    patternHint: Hasta 40 caracteres; letras, números, guion y guion bajo, sin extensión. Puede empezar por flash/.
+    help: Si en la lista de archivos del equipo aparece una carpeta flash, escribe flash/ delante del nombre.
+preflight:
+  - text: >-
+      Mira los archivos del equipo. Si existe una carpeta llamada flash, todo lo que
+      se guarde fuera de ella está en memoria RAM y se pierde al reiniciar: en ese
+      caso el nombre de la copia tiene que empezar por flash/.
+    command: /file print
+  - text: >-
+      La copia contiene información sensible de la red. Ten decidido dónde vas a
+      guardarla fuera del switch.
+steps:
+  - title: Crear la copia binaria completa
+    commands:
+      - /system backup save name={{backupName}}
+    explanation: >-
+      Guarda toda la configuración en el archivo {{backupName}}.backup. El equipo
+      responde Configuration backup saved. Incluye las direcciones MAC del
+      dispositivo, así que está pensada para restaurarse en este mismo equipo.
+    warning: >-
+      Sin contraseña, el archivo queda sin cifrar (desde RouterOS 6.43). Para
+      cifrarlo añade password= con una contraseña al final del comando; este manual
+      no la guarda, anótala en el gestor de contraseñas de la empresa.
+    breakdown:
+      - token: /system backup save
+        meaning: Crea una copia binaria de toda la configuración.
+      - token: name={{backupName}}
+        meaning: Nombre del archivo, sin extensión. Si se omite, el equipo usa identidad, fecha y hora.
+  - title: Crear la exportación en texto
+    commands:
+      - /export file={{backupName}}
+    explanation: >-
+      Genera el archivo {{backupName}}.rsc con los comandos que reproducen la
+      configuración. Se puede leer y comparar, y sirve para rehacer la
+      configuración a mano o en otro equipo. Por defecto solo incluye lo que se
+      cambió respecto a los valores de fábrica y oculta contraseñas y claves.
+    breakdown:
+      - token: /export
+        meaning: Vuelca la configuración como comandos de RouterOS. Ejecutado desde la raíz exporta todo.
+      - token: file={{backupName}}
+        meaning: Escribe el resultado en un archivo en vez de mostrarlo en pantalla.
+  - title: Sacar los archivos del switch
+    manual: true
+    explanation: >-
+      Descarga {{backupName}}.backup y {{backupName}}.rsc con WinBox (menú Files) o
+      por SFTP y guárdalos en el repositorio de copias de la empresa. Una copia que
+      solo está en el switch no sirve si el equipo se avería.
+verification:
+  - command: /file print
+    expect: >-
+      Aparecen {{backupName}}.backup, de tipo backup, y {{backupName}}.rsc, con la
+      fecha y hora de ahora y un tamaño mayor que cero.
+rollback:
+  summary: >-
+    No hay nada que deshacer en la configuración. Si los archivos no hacen falta, se
+    pueden borrar del equipo.
+  steps:
+    - title: Borrar los archivos creados
+      commands:
+        - /file remove {{backupName}}.backup
+        - /file remove {{backupName}}.rsc
+      explanation: Elimina los dos archivos del almacenamiento del switch. No toca la configuración.
+sources:
+  - title: RouterOS — Backup
+    url: https://help.mikrotik.com/docs/display/ROS/Backup
+  - title: RouterOS — Configuration Management (export e import)
+    url: https://help.mikrotik.com/docs/display/ROS/Configuration+Management
+  - title: RouterOS — Files
+    url: https://help.mikrotik.com/docs/display/ROS/Files
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: RouterOS 7
+  notes: >-
+    backup save, export y file print están contrastados con la documentación
+    oficial. La forma exacta de /file remove con el nombre del archivo no aparece en
+    las páginas consultadas, y no se comprobó si el CRS317 tiene carpeta flash.
+    Falta probar la guía en un equipo real.

@@ -1,0 +1,18 @@
+id: config-restore
+title: Restaurar una configuración guardada
+group: setup-access
+order: 2
+summary: Devuelve el switch a un estado anterior a partir de una copia hecha previamente.
+explanation: >-
+  Restaurar sustituye la configuración actual por la de una copia. Es la vuelta atrás
+  de último recurso cuando un cambio dejó la red mal y no alcanza con deshacer
+  comandos sueltos. Afecta al switch entero, no solo a lo último que tocaste.
+risks:
+  - Se pierde todo cambio hecho después de la copia, también los que estaban bien.
+  - Si la copia tiene otra IP de gestión, otras VLAN u otros usuarios, puedes quedarte sin acceso remoto.
+  - En algunas plataformas la restauración reinicia el switch y corta el tráfico durante unos minutos.
+  - Restaurar una copia de otro equipo o de otra versión de firmware puede dejar el switch en un estado inconsistente.
+prerequisites:
+  - Tener a mano acceso por consola, por si se pierde la gestión remota.
+  - Haber avisado del posible corte y hacerlo en una ventana de mantenimiento.
+  - Guardar primero una copia del estado actual, aunque esté mal, para poder volver a él.

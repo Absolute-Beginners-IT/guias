@@ -1,0 +1,83 @@
+platform: aruba-aoscx
+task: ssh-access
+summary: >-
+  Comprueba y activa el servidor SSH de un Aruba CX 6100 en la VRF por defecto, que
+  es por donde se gestiona este modelo.
+risk:
+  level: low
+  reason: >-
+    Activar SSH no corta ninguna sesión ni afecta al tráfico. El riesgo está en la
+    vuelta atrás: desactivarlo corta las sesiones SSH abiertas.
+params: []
+preflight:
+  - text: >-
+      Mira el estado del servidor SSH. En este modelo viene activado de fábrica; si
+      Server Status ya es running, no hace falta cambiar nada.
+    command: show ssh server
+  - text: >-
+      SSH no funciona hasta que la cuenta admin tiene contraseña definida. Se define
+      en el primer inicio de sesión.
+steps:
+  - title: Entrar en modo configuración
+    commands:
+      - config
+    explanation: Pasa a configuración global. El prompt cambia a switch(config)#.
+  - title: Activar el servidor SSH
+    commands:
+      - ssh server vrf default
+    explanation: >-
+      Activa el servidor SSH en la VRF por defecto, donde está la interfaz de
+      gestión en banda de este modelo.
+    breakdown:
+      - token: ssh server
+        meaning: Servidor SSH del switch, el que acepta las sesiones de administración.
+      - token: vrf default
+        meaning: Tabla de enrutamiento en la que escucha. El 6100 se gestiona por la VRF por defecto.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve al modo Manager.
+  - title: Probar el acceso por SSH
+    manual: true
+    explanation: >-
+      Desde tu equipo de administración, abre una sesión SSH hacia la IP de gestión
+      del switch y entra con tu usuario.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: Copia la configuración en ejecución a la de arranque.
+verification:
+  - command: show ssh server
+    expect: >-
+      Server Status es running y TCP Port es 22. Allow-list aparece como disabled,
+      es decir, cualquier equipo con credenciales válidas puede intentar entrar.
+rollback:
+  summary: Desactivar SSH solo tiene sentido por consola, porque corta las sesiones SSH.
+  steps:
+    - title: Desactivar el servidor SSH
+      commands:
+        - config
+        - no ssh server vrf default
+        - end
+      explanation: Desactiva el servidor SSH en la VRF por defecto.
+      warning: Si estás conectado por SSH, la sesión se corta. Hazlo solo por el puerto de consola.
+  lockoutRecovery: >-
+    Si desactivaste SSH por error y perdiste la sesión, entra por el puerto de
+    consola y vuelve a activarlo. Si todavía no habías guardado, un reinicio recupera
+    la configuración de arranque.
+sources:
+  - title: AOS-CX 10.15 Security Guide (4100i, 6000, 6100) — ssh server vrf
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/security_4100i-6000-6100/Content/Chp_SSH_serv/SSH_serv_cmds/ssh-ser-vrf65.htm
+  - title: AOS-CX 10.15 Security Guide — show ssh server
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/security_4100i-6000-6100/Content/Chp_SSH_serv/SSH_serv_cmds/sho-ssh-ser-10.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — interfaz de gestión en banda
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_IniCfg/cnf-man-int.htm
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: AOS-CX 10.15
+  notes: >-
+    Sintaxis contrastada con la documentación oficial. Esta guía no cubre Telnet ni
+    la lista de equipos permitidos (ssh server allow-list): no se contrastaron sus
+    comandos. Comprueba en tu switch si el servidor Telnet está activo. Falta probar
+    la guía en un 6100 real.

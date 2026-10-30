@@ -1,0 +1,136 @@
+platform: aruba-aoscx
+task: vlan-create
+summary: >-
+  Crea una VLAN en un Aruba CX 6100, le asigna un nombre y guarda el cambio. No toca
+  ningún puerto.
+risk:
+  level: low
+  reason: >-
+    Dar de alta una VLAN no afecta a los puertos ni al tráfico existente. El único
+    error con consecuencias es usar por descuido el ID de una VLAN que ya está en uso.
+params:
+  - id: vlanId
+    label: ID de la VLAN
+    type: vlan-id
+    example: '20'
+    help: Número de 1 a 4094. La VLAN 1 es la de por defecto y no se puede borrar.
+  - id: vlanName
+    label: Nombre de la VLAN
+    type: text
+    example: VOZ
+    pattern: '^[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres; solo letras, números, guion y guion bajo, sin espacios.
+    help: Tiene que ser único en el switch.
+  - id: checkpointName
+    label: Nombre del checkpoint de respaldo
+    type: text
+    example: antes-vlan-20
+    pattern: '^(?!CPC)[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres; letras, números, guion y guion bajo; no puede empezar por CPC.
+    help: Es el punto al que vas a poder volver si algo sale mal.
+preflight:
+  - text: >-
+      Comprueba que el ID no esté ya en uso. Si aparece en la lista, no sigas: estarías
+      modificando una VLAN existente.
+    command: show vlan
+  - text: >-
+      Guarda un checkpoint con la configuración actual. El switch responde Success.
+    command: copy running-config checkpoint {{checkpointName}}
+  - text: Este modelo admite como máximo 512 VLANs.
+steps:
+  - title: Entrar en modo configuración
+    commands:
+      - config
+    explanation: >-
+      Pasa del modo Manager al de configuración global. El prompt cambia a
+      switch(config)#.
+  - title: Crear la VLAN
+    commands:
+      - vlan {{vlanId}}
+    explanation: >-
+      Crea la VLAN y entra en su contexto; el prompt pasa a
+      switch(config-vlan-{{vlanId}})#. La VLAN queda habilitada desde el momento en
+      que se crea. Si ya existía, el comando solo entra en su contexto.
+    breakdown:
+      - token: vlan
+        meaning: Crea la VLAN indicada o entra en ella si ya existe.
+      - token: '{{vlanId}}'
+        meaning: Identificador de la VLAN, de 1 a 4094. Es el número que viaja en la etiqueta 802.1Q.
+  - title: Ponerle nombre
+    commands:
+      - name {{vlanName}}
+    explanation: >-
+      Asocia un nombre a la VLAN para reconocerla en las consultas. Sin este paso
+      queda con el nombre por defecto VLAN{{vlanId}}.
+    breakdown:
+      - token: name
+        meaning: Asigna el nombre de la VLAN en la que estás.
+      - token: '{{vlanName}}'
+        meaning: Nombre único en el switch, de 1 a 32 caracteres alfanuméricos, guion o guion bajo.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve al modo Manager, desde donde se hacen las consultas y se guarda.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: >-
+      Copia la configuración en ejecución a la de arranque. Hazlo solo después de
+      verificar que todo está bien: hasta este paso, un reinicio deshace el cambio.
+    warning: Verifica primero (sección siguiente) y guarda después.
+verification:
+  - command: show vlan {{vlanId}}
+    expect: >-
+      Una fila con el ID {{vlanId}}, el nombre {{vlanName}} y tipo static. Mientras no
+      tenga puertos asignados, el estado aparece como down con motivo no_member_port;
+      es lo normal en una VLAN recién creada.
+  - command: show running-config
+    expect: Aparece el bloque "vlan {{vlanId}}" con la línea "name {{vlanName}}" debajo.
+rollback:
+  summary: >-
+    Como la VLAN es nueva y no tiene puertos, basta con borrarla. Si además tocaste
+    otra cosa por error, vuelve al checkpoint.
+  steps:
+    - title: Borrar la VLAN creada
+      commands:
+        - config
+        - no vlan {{vlanId}}
+        - end
+      explanation: >-
+        Elimina la VLAN. Antes de borrarla confirma con show vlan {{vlanId}} que la
+        columna Interfaces está vacía.
+    - title: Volver al estado anterior completo
+      commands:
+        - checkpoint rollback {{checkpointName}}
+      explanation: >-
+        Aplica sobre la configuración en ejecución el checkpoint que guardaste antes
+        de empezar. Deshace todos los cambios posteriores, no solo la VLAN.
+    - title: Si ya habías guardado con write memory
+      commands:
+        - write memory
+      explanation: >-
+        Después de borrar la VLAN o de volver al checkpoint, guarda de nuevo para que
+        la configuración de arranque también quede sin el cambio.
+  lockoutRecovery: >-
+    Crear una VLAN no corta el acceso de gestión. Si perdieras la conexión por otro
+    motivo antes de haber ejecutado write memory, un reinicio del switch recupera la
+    configuración de arranque anterior.
+sources:
+  - title: AOS-CX 10.15 Layer-2 Bridging Guide (4100i, 6000, 6100, 5420, 6200) — comando vlan
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/l2_bridging_4100i-6000-6100-5420-6200/Content/Chp_vlans/vlan_cmds/vla.htm
+  - title: AOS-CX 10.15 Layer-2 Bridging Guide — comando name
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/l2_bridging_4100i-6000-6100-5420-6200/Content/Chp_vlans/vlan_cmds/nam.htm
+  - title: AOS-CX 10.15 Layer-2 Bridging Guide — comando show vlan
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/l2_bridging_4100i-6000-6100-5420-6200/Content/Chp_vlans/vlan_cmds/sho-vla.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — write memory
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/Chk_cmds/wri-mem.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — checkpoint rollback
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/Chk_cmds/che-rol.htm
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: AOS-CX 10.15
+  notes: >-
+    Sintaxis contrastada con la documentación oficial. El comando end y el nombre por
+    defecto de la VLAN no se comprobaron en la documentación; falta probar la guía en
+    un 6100 real.

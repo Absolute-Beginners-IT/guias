@@ -1,0 +1,176 @@
+platform: mikrotik-routeros
+task: lag-create
+summary: >-
+  Crea un bonding 802.3ad (LACP) en un MikroTik con RouterOS con dos puertos libres
+  y lo añade al bridge como un puerto más. Las VLAN se le asignan después con la
+  guía de trunk, usando el nombre del bonding como puerto.
+risk:
+  level: high
+  reason: >-
+    Una agregación mal emparejada con el otro extremo puede formar un bucle de capa
+    2, los puertos elegidos dejan de ser puertos del bridge, y RouterOS guarda cada
+    cambio sin paso de confirmación.
+params:
+  - id: bondName
+    label: Nombre del bonding
+    type: text
+    example: bond1
+    pattern: '^[A-Za-z0-9_-]{1,24}$'
+    patternHint: Hasta 24 caracteres; letras, números, guion y guion bajo.
+  - id: port1
+    label: Primer puerto miembro
+    type: text
+    example: sfp-sfpplus15
+    pattern: '^[A-Za-z0-9_.+-]{1,32}$'
+    patternHint: Nombre del puerto tal como aparece en /interface bridge port print, sin espacios.
+  - id: port2
+    label: Segundo puerto miembro
+    type: text
+    example: sfp-sfpplus16
+    pattern: '^[A-Za-z0-9_.+-]{1,32}$'
+    patternHint: Nombre del puerto tal como aparece en /interface bridge port print, sin espacios.
+  - id: bridgeName
+    label: Nombre del bridge
+    type: text
+    example: bridge1
+    pattern: '^[A-Za-z0-9_.-]{1,32}$'
+    patternHint: Hasta 32 caracteres; letras, números, punto, guion y guion bajo.
+  - id: backupName
+    label: Nombre de la copia de respaldo
+    type: text
+    example: crs317-antes-bond1
+    pattern: '^(flash/)?[A-Za-z0-9_-]{1,40}$'
+    patternHint: Hasta 40 caracteres; letras, números, guion y guion bajo, sin extensión. Puede empezar por flash/.
+preflight:
+  - text: >-
+      Confirma que los dos puertos están libres, sin enlace, y que no aparecen en
+      ninguna lista tagged o untagged de la tabla de VLAN. Si alguno está en uso,
+      detente.
+    command: /interface bridge vlan print detail
+  - text: Mira si los dos puertos son ahora puertos del bridge; un puerto no puede ser a la vez puerto del bridge y miembro de un bonding.
+    command: /interface bridge port print
+  - text: Comprueba que los puertos no tienen direcciones IP asignadas.
+    command: /ip address print
+  - text: Guarda una copia completa de la configuración.
+    command: /system backup save name={{backupName}}
+  - text: >-
+      No conectes los dos cables hasta que el otro extremo también tenga su
+      agregación con LACP configurada.
+steps:
+  - title: Activar Safe Mode
+    manual: true
+    explanation: >-
+      Pulsa Ctrl+X (o F4). El prompt pasa a mostrar SAFE. Si tu sesión se corta, los
+      cambios se deshacen solos al vencer el tiempo de espera de la conexión.
+  - title: Sacar los dos puertos del bridge
+    commands:
+      - /interface bridge port remove [find where interface={{port1}}]
+      - /interface bridge port remove [find where interface={{port2}}]
+    explanation: >-
+      Quita {{port1}} y {{port2}} de los puertos del bridge para que puedan ser
+      miembros del bonding. Si no estaban en el bridge, estos comandos no hacen nada.
+    warning: Desde este paso esos dos puertos dejan de conmutar tráfico por sí solos.
+  - title: Crear el bonding con LACP
+    commands:
+      - /interface bonding add mode=802.3ad name={{bondName}} slaves={{port1}},{{port2}}
+    explanation: >-
+      Crea la interfaz lógica {{bondName}} con los dos puertos y negociación LACP.
+      Tarda unos segundos en tener conectividad con el otro extremo.
+    breakdown:
+      - token: /interface bonding add
+        meaning: Crea una interfaz de agregación de enlaces.
+      - token: mode=802.3ad
+        meaning: Usa LACP. Si se omite, el modo por defecto es balance-rr, que no es LACP ni lo acelera el chip de conmutación.
+      - token: name={{bondName}}
+        meaning: Nombre de la interfaz lógica; es el que se usa después en el bridge y en la tabla de VLAN.
+      - token: slaves={{port1}},{{port2}}
+        meaning: Puertos físicos miembro, separados por comas.
+  - title: Añadir el bonding al bridge
+    commands:
+      - /interface bridge port add bridge={{bridgeName}} interface={{bondName}} hw=yes
+    explanation: >-
+      Hace que {{bondName}} sea un puerto del bridge {{bridgeName}}, con la
+      conmutación acelerada por hardware. A partir de aquí se trata como cualquier
+      otro puerto.
+    breakdown:
+      - token: interface={{bondName}}
+        meaning: Se añade la interfaz lógica, no sus puertos miembro.
+      - token: hw=yes
+        meaning: Pide que el chip de conmutación gestione el tráfico de este puerto.
+  - title: Asignar las VLAN al bonding
+    manual: true
+    explanation: >-
+      Sigue la guía Configurar un puerto trunk de esta misma marca usando
+      {{bondName}} como nombre de puerto, una vez por cada VLAN que deba pasar por
+      la agregación.
+  - title: Conectar los cables y comprobar
+    manual: true
+    explanation: >-
+      Con el otro extremo ya configurado, conecta los dos cables y haz las
+      comprobaciones de la sección Verificación sin salir de Safe Mode.
+  - title: Salir de Safe Mode conservando el cambio
+    manual: true
+    explanation: >-
+      Pulsa Ctrl+X de nuevo. El cambio queda guardado. Si algo no está bien, pulsa
+      Ctrl+D en su lugar para salir deshaciendo lo hecho.
+verification:
+  - command: /interface bonding monitor-slaves {{bondName}}
+    expect: >-
+      Los dos puertos aparecen con las marcas A, G, S, C y D (actividad, agregación,
+      sincronización, recibiendo y distribuyendo) y con los datos del equipo del
+      otro extremo.
+  - command: /interface bridge port print
+    expect: >-
+      {{bondName}} figura como puerto del bridge {{bridgeName}} con la marca H
+      (hw-offload), y {{port1}} y {{port2}} ya no aparecen.
+rollback:
+  summary: >-
+    Dentro de Safe Mode, Ctrl+D deshace todo. Fuera de Safe Mode hay que quitar los
+    cables de la agregación y desmontarla en orden inverso.
+  steps:
+    - title: Si sigues en Safe Mode
+      manual: true
+      explanation: Pulsa Ctrl+D. Sale de Safe Mode deshaciendo los cambios hechos en él.
+    - title: Desconectar los cables de la agregación
+      manual: true
+      explanation: >-
+        Quita al menos uno de los dos cables antes de desmontar el bonding: como
+        puertos sueltos del bridge, dos cables hacia el mismo switch formarían un
+        bucle.
+    - title: Quitar el bonding del bridge y borrarlo
+      commands:
+        - /interface bridge port remove [find where interface={{bondName}}]
+        - /interface bonding remove [find where name={{bondName}}]
+      explanation: Saca {{bondName}} del bridge y elimina la interfaz lógica. Los puertos quedan sueltos, fuera del bridge.
+      warning: Antes, quita {{bondName}} de las listas de la tabla de VLAN donde lo hayas puesto.
+    - title: Volver a meter los puertos en el bridge
+      commands:
+        - /interface bridge port add bridge={{bridgeName}} interface={{port1}}
+        - /interface bridge port add bridge={{bridgeName}} interface={{port2}}
+      explanation: >-
+        Devuelve los dos puertos al bridge con sus valores por defecto. Si tenían
+        un PVID u otros ajustes, hay que reaplicarlos.
+  lockoutRecovery: >-
+    Si la red se vuelve inestable o pierdes el acceso justo después de conectar los
+    cables, sospecha de un bucle: desconecta uno de los dos cables de la agregación.
+    Si la sesión se cortó con Safe Mode activo, los cambios se deshacen solos en
+    unos 9 minutos. Si no, entra por consola o carga la copia guardada antes de
+    empezar.
+sources:
+  - title: RouterOS — CRS3xx, CRS5xx, CCR2116, CCR2216 switch chip features (bonding)
+    url: https://help.mikrotik.com/docs/spaces/ROS/pages/30474317/CRS3xx+CRS5xx+CCR2116+CCR2216+switch+chip+features
+  - title: RouterOS — Bonding
+    url: https://help.mikrotik.com/docs/display/ROS/Bonding
+  - title: RouterOS — Configuration Management (Safe Mode)
+    url: https://help.mikrotik.com/docs/display/ROS/Configuration+Management
+status:
+  level: unverified
+  reviewed: '2026-10-13'
+  firmware: RouterOS 7
+  notes: >-
+    Marcada sin verificar. La creación del bonding 802.3ad, su alta en el bridge con
+    hw=yes y monitor-slaves están contrastados con la documentación oficial, que
+    confirma además que el chip de este modelo acelera el modo 802.3ad. No están en
+    la documentación consultada, y hay que confirmarlos en un equipo: las formas de
+    remove con find, el orden exacto de sacar los puertos del bridge antes de crear
+    el bonding, y toda la vuelta atrás. Falta probar la guía en un equipo real.

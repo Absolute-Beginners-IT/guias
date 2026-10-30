@@ -1,0 +1,106 @@
+platform: cisco-c1300
+task: firmware-upgrade
+summary: >-
+  Instala una imagen de firmware por TFTP en un Cisco Catalyst 1300 y reinicia con
+  ella. El switch conserva la imagen anterior como imagen inactiva para volver atrás.
+risk:
+  level: high
+  reason: >-
+    El switch se reinicia y corta todo el tráfico durante el arranque. Además, al
+    instalar una imagen se borra la que estaba como inactiva.
+params:
+  - id: serverIp
+    label: IP del servidor TFTP
+    type: ipv4
+    example: 192.168.10.50
+  - id: fileName
+    label: Archivo de la imagen
+    type: text
+    example: image_c1300_4.1.9.94.bin
+    pattern: '^[A-Za-z0-9._-]{1,80}$'
+    patternHint: Nombre del archivo, sin espacios ni carpetas.
+    help: Tiene que ser la imagen para la serie Catalyst 1300.
+  - id: configBackupName
+    label: Nombre para la copia de la configuración
+    type: text
+    example: c1300-antes-firmware.txt
+    pattern: '^[A-Za-z0-9._-]{1,60}$'
+    patternHint: Hasta 60 caracteres; letras, números, punto, guion y guion bajo, sin espacios.
+preflight:
+  - text: >-
+      Mira qué imagen está activa y cuál inactiva, con sus versiones. La inactiva
+      actual se va a borrar.
+    command: show bootvar
+  - text: Saca una copia de la configuración fuera del switch.
+    command: copy running-config tftp://{{serverIp}}/{{configBackupName}}
+  - text: Guarda la configuración en ejecución, para que el switch arranque con ella después de actualizar.
+    command: write memory
+  - text: Lee las notas de la versión y confirma que el salto desde la versión actual está soportado.
+steps:
+  - title: Instalar la imagen nueva
+    commands:
+      - boot system tftp://{{serverIp}}/{{fileName}}
+    explanation: >-
+      Descarga el archivo, comprueba su formato y lo instala como imagen activa para
+      el próximo arranque. La imagen que está en uso pasa a ser la inactiva, y la
+      inactiva anterior se borra. Si el archivo no es una imagen válida, el switch
+      lo descarta y da error.
+    warning: No apagues el switch mientras descarga e instala. El switch sigue funcionando con la versión actual hasta reiniciar.
+    breakdown:
+      - token: boot system
+        meaning: Instala una imagen de firmware como la activa para el siguiente arranque.
+      - token: tftp://{{serverIp}}/{{fileName}}
+        meaning: Origen; servidor TFTP y archivo de firmware. La guía oficial admite también scp://, usb:// y flash://.
+  - title: Comprobar qué imagen arrancará
+    commands:
+      - show bootvar
+    explanation: >-
+      La versión nueva tiene que aparecer marcada como Active after reboot, y la
+      versión en uso como Inactive after reboot.
+  - title: Reiniciar el switch
+    commands:
+      - reload
+    explanation: Reinicia el equipo para que arranque con la imagen nueva. Pide confirmación.
+    warning: Al confirmar se corta todo el tráfico del switch hasta que termina de arrancar.
+  - title: Esperar el arranque y volver a entrar
+    manual: true
+    explanation: >-
+      Conéctate de nuevo cuando el equipo termine de arrancar y haz las
+      comprobaciones de la sección Verificación.
+verification:
+  - command: show version
+    expect: La imagen activa es la versión nueva y la inactiva es la versión anterior.
+  - command: show vlan
+    expect: Las VLAN y sus puertos son los mismos que antes de actualizar.
+rollback:
+  summary: >-
+    La versión anterior queda como imagen inactiva. Volver atrás es intercambiar las
+    dos imágenes y reiniciar.
+  steps:
+    - title: Volver a la imagen anterior
+      commands:
+        - boot system inactive-image
+        - reload
+      explanation: >-
+        Hace que la imagen inactiva pase a ser la activa y reinicia. Si la versión
+        nueva cambió el formato de la configuración, restaura después la copia hecha
+        en Antes de empezar con la guía de restaurar configuración.
+      warning: Vuelve a cortar todo el tráfico durante el arranque.
+  lockoutRecovery: >-
+    Si después del reinicio no puedes entrar por red, conéctate por el puerto de
+    consola, revisa la IP de gestión y, si hace falta, vuelve a la imagen anterior
+    con la vuelta atrás.
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — File System Commands (boot system, show bootvar)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/file-system-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — System Management Commands (reload, show software versions)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/system-management-commands.html
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: >-
+    boot system, show bootvar y reload están contrastados con la guía oficial de la
+    CLI. La guía no dice de forma literal que haga falta reiniciar, pero marca la
+    imagen nueva como Active after reboot. El nombre del archivo de ejemplo es
+    orientativo. Falta probarla en un C1300 real.

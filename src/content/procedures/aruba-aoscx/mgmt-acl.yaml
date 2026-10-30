@@ -1,0 +1,205 @@
+platform: aruba-aoscx
+task: mgmt-acl
+summary: >-
+  Limita el acceso de gestión de un Aruba CX 6100 por SSH (TCP 22) y por la web
+  (HTTPS, TCP 443) a la red de administración, con reglas en la ACL de control plane
+  y protegido con el modo checkpoint auto.
+risk:
+  level: high
+  reason: >-
+    La ACL de control plane filtra todo el tráfico dirigido al propio switch. Si la
+    red desde la que trabajas no está en la regla de permiso, al aplicarla pierdes el
+    SSH y la web. Un error en el orden de las reglas puede cortar además SNMP, DHCP u
+    otros protocolos del switch. Solo puede haber una ACL de control plane por VRF:
+    aplicar otra con distinto nombre reemplaza la que ya hubiera, por ejemplo la del
+    runbook de SNMP.
+params:
+  - id: adminNetwork
+    label: Red de administración
+    type: cidr
+    example: 192.168.10.0/24
+    help: La red desde la que se gestionan los switches. Tu equipo tiene que estar dentro.
+  - id: aclName
+    label: Nombre de la ACL de control plane
+    type: text
+    example: SNMP-CONTROL-PLANE
+    pattern: '^[A-Za-z0-9_-]{1,64}$'
+    patternHint: Hasta 64 caracteres; letras, números, guion y guion bajo.
+    help: >-
+      Si el switch ya tiene una ACL de control plane, por ejemplo la del runbook de
+      SNMP, pon exactamente su nombre: las reglas se añaden a ella. Si no tiene
+      ninguna, elige un nombre nuevo.
+  - id: checkpointName
+    label: Nombre del checkpoint de respaldo
+    type: text
+    example: antes-acl-gestion
+    pattern: '^(?!CPC)[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres; letras, números, guion y guion bajo; no puede empezar por CPC.
+  - id: minutes
+    label: Minutos de margen del modo auto
+    type: number
+    min: 1
+    max: 60
+    example: '10'
+    help: Tiempo para comprobar que sigues teniendo acceso antes de que el switch deshaga el cambio solo.
+preflight:
+  - text: >-
+      Mira si ya hay una ACL aplicada al control plane y cómo se llama. Solo puede
+      haber una por VRF: si existe, usa su nombre en este runbook para añadirle las
+      reglas en lugar de reemplazarla.
+    command: show running-config | include control-plane
+  - text: >-
+      Si la ACL ya existe, revisa sus reglas. Los números 21 a 24 tienen que estar
+      libres y la regla final permit any any any tiene que tener un número mayor que
+      24, como la 30 del runbook de SNMP. Si no es así, no sigas: las reglas nuevas
+      quedarían detrás del permiso general y no filtrarían nada.
+    command: show access-list ip {{aclName}} commands
+  - text: >-
+      Comprueba que la IP del equipo desde el que trabajas está dentro de
+      {{adminNetwork}}. Si no, te quedas fuera al aplicar la ACL.
+  - text: Guarda un checkpoint con la configuración actual.
+    command: copy running-config checkpoint {{checkpointName}}
+  - text: Ten a mano el acceso por consola.
+steps:
+  - title: Activar el modo checkpoint auto
+    commands:
+      - checkpoint auto {{minutes}}
+    explanation: >-
+      Abre una ventana de {{minutes}} minutos. Si no confirmas antes de que venza, el
+      switch restaura la configuración que tenía en este momento. Te protege si la ACL
+      te deja sin acceso.
+  - title: Entrar en modo configuración
+    commands:
+      - config
+    explanation: Pasa a configuración global. El prompt cambia a switch(config)#.
+  - title: Añadir las reglas de gestión a la ACL
+    commands:
+      - access-list ip {{aclName}}
+      - 21 permit tcp {{adminNetwork}} any eq 22
+      - 22 permit tcp {{adminNetwork}} any eq 443
+      - 23 deny tcp any any eq 22 log
+      - 24 deny tcp any any eq 443 log
+      - 1000 permit any any any
+      - exit
+    explanation: >-
+      Crea la ACL si no existe, o entra en la que ya hay. Permite SSH y HTTPS solo
+      desde {{adminNetwork}}, rechaza y registra los intentos desde cualquier otro
+      origen, y deja pasar el resto del tráfico hacia el switch.
+    warning: >-
+      La regla 1000 es imprescindible en una ACL nueva: sin ella, la denegación
+      implícita del final corta SNMP, DHCP y cualquier otro tráfico hacia el switch.
+      En la ACL del runbook de SNMP ya hay un permit any any any en la 30; la 1000 no
+      cambia nada allí.
+    breakdown:
+      - token: access-list ip {{aclName}}
+        meaning: Entra en el contexto de la ACL IPv4. El prompt queda en switch(config-acl-ip)#.
+      - token: 21 permit tcp {{adminNetwork}} any eq 22
+        meaning: Permite SSH (TCP 22) desde la red de administración hacia cualquier IP del switch.
+      - token: 22 permit tcp {{adminNetwork}} any eq 443
+        meaning: Permite la web de gestión (HTTPS, TCP 443) desde la red de administración.
+      - token: 23 deny tcp any any eq 22 log
+        meaning: Rechaza SSH desde cualquier otro origen y lo deja en el registro.
+      - token: 24 deny tcp any any eq 443 log
+        meaning: Rechaza la web desde cualquier otro origen y lo deja en el registro.
+      - token: 1000 permit any any any
+        meaning: Deja pasar todo lo demás, para no cortar SNMP, DHCP ni otros servicios.
+  - title: Aplicar la ACL al control plane
+    commands:
+      - apply access-list ip {{aclName}} control-plane vrf default
+    explanation: >-
+      Hace que la ACL filtre el tráfico dirigido al propio switch en la VRF default,
+      la única del 6100. Si la ACL ya estaba aplicada con este nombre, el comando no
+      cambia nada.
+    warning: >-
+      Si el control plane ya tenía otra ACL con distinto nombre, este comando la
+      reemplaza y sus reglas dejan de aplicarse. Por eso la comprobación previa pide
+      usar el mismo nombre.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve al modo Manager.
+  - title: Comprobar el acceso
+    manual: true
+    explanation: >-
+      Dentro de la ventana de {{minutes}} minutos, abre una sesión SSH nueva y la web
+      de gestión desde tu equipo de la red {{adminNetwork}} y confirma que entras. Si
+      puedes, prueba desde un equipo fuera de esa red: no tiene que poder conectar. Si
+      usas el runbook de SNMP, comprueba también que la monitorización sigue
+      respondiendo.
+  - title: Confirmar el cambio
+    commands:
+      - checkpoint auto confirm
+    explanation: Termina el modo auto y deja el cambio como definitivo en ejecución.
+    warning: Si no ejecutas este comando a tiempo, el switch vuelve solo al estado anterior.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: Copia la configuración en ejecución a la de arranque.
+verification:
+  - command: show access-list ip {{aclName}}
+    expect: >-
+      Las reglas 21 a 24 antes del permit any any any final, y las de SNMP si las
+      había.
+  - command: show running-config | include control-plane
+    expect: Una sola línea, apply access-list ip {{aclName}} control-plane vrf default.
+rollback:
+  summary: >-
+    Mientras el modo auto esté activo, la vuelta atrás es no confirmar. Si ya
+    confirmaste, quita las reglas de gestión de la ACL, o vuelve al checkpoint.
+  steps:
+    - title: Si todavía no confirmaste
+      manual: true
+      explanation: >-
+        No ejecutes checkpoint auto confirm. Cuando venza la ventana, el switch
+        restaura solo la configuración anterior.
+    - title: Si ya confirmaste, quitar las reglas de gestión
+      commands:
+        - config
+        - access-list ip {{aclName}}
+        - no 21
+        - no 22
+        - no 23
+        - no 24
+        - exit
+        - end
+        - write memory
+      explanation: >-
+        SSH y la web vuelven a aceptar conexiones desde cualquier origen. Las reglas de
+        SNMP, si las había, siguen funcionando. La regla 1000 puede quedarse: deja
+        pasar todo.
+    - title: 'Alternativa: volver al checkpoint'
+      commands:
+        - checkpoint rollback {{checkpointName}}
+        - write memory
+      explanation: Vuelve al estado guardado antes de empezar y lo deja también en la configuración de arranque.
+  lockoutRecovery: >-
+    Si pierdes el acceso con el modo auto activo, espera: al vencer la ventana el switch
+    recupera la configuración anterior. Si ya habías confirmado, entra por el puerto de
+    consola, que la ACL no filtra, y borra las reglas 21 a 24 de la ACL {{aclName}}, o
+    quita la ACL entera con no apply access-list ip {{aclName}} control-plane vrf
+    default.
+sources:
+  - title: AOS-CX 10.15 ACLs and Classifier Policies Guide (4100i, 6000, 6100) — apply access-list control-plane
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/acls_4100i-6000-6100/Content/Chp_ACLs/ACLs_cmds/app-acc-lis-con-pla.htm
+  - title: AOS-CX 10.15 ACLs and Classifier Policies Guide — access-list ip
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/acls_4100i-6000-6100/Content/Chp_ACLs/ACLs_cmds/acc-lis-ip.htm
+  - title: AOS-CX 10.15 ACLs and Classifier Policies Guide — show access-list
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/acls_4100i-6000-6100/Content/Chp_ACLs/ACLs_cmds/sho-acc-lis.htm
+  - title: AOS-CX 10.15 Hardening Guide — Control Plane ACLs
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/hardening/Content/Chp_hard-mgmt/ctrl-plane-acl.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — checkpoint auto
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/Chk_cmds/che-aut.htm
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: AOS-CX 10.15
+  notes: >-
+    La guía de ACL del 6100 para la 10.15 confirma apply access-list ... control-plane
+    vrf, que solo cabe una ACL por tipo y VRF y que aplicar otra la reemplaza; la
+    sintaxis de las reglas, el log en el control plane y no <número> salen de la
+    página de access-list ip. Se añaden las reglas a la ACL existente, en lugar de
+    crear otra, para no anular la de SNMP. No se confirmó en la documentación que la
+    web de gestión escuche solo en TCP 443, ni que las reglas nuevas filtren al
+    momento en una ACL ya aplicada sin volver a aplicarla. El filtro show
+    running-config | include control-plane puede no mostrar la ACL en algunas
+    versiones. Falta probar este runbook en un 6100.

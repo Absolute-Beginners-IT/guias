@@ -1,0 +1,255 @@
+platform: aruba-aoscx
+task: snmp-monitoring
+summary: >-
+  Activa SNMPv3 con autenticación y cifrado (authPriv, SHA y AES) en un Aruba CX 6100
+  y limita las consultas SNMP a la IP del servidor de monitorización con una ACL de
+  control plane, protegida con el modo checkpoint auto.
+risk:
+  level: high
+  reason: >-
+    La ACL de control plane filtra todo el tráfico dirigido al propio switch, no solo
+    SNMP: un error en sus reglas corta el SSH, la web de gestión o el DHCP del switch.
+    Además, si el agente se activa sin cambiar la comunidad public de fábrica, el
+    switch queda legible por SNMP v2c sin contraseña.
+params:
+  - id: nmsIp
+    label: IP del servidor de monitorización
+    type: ipv4
+    example: 192.168.10.40
+  - id: snmpUser
+    label: Usuario SNMPv3
+    type: text
+    example: snmpuser
+    pattern: '^[A-Za-z0-9_-]{1,32}$'
+    patternHint: Sin espacios; letras, números, guion y guion bajo. Tiene que coincidir con el de la herramienta de monitorización.
+  - id: authKey
+    label: Clave de autenticación SNMPv3
+    type: secret
+    example: Cambia3sta-Clave
+    pattern: '^[A-Za-z0-9_.@+-]{8,32}$'
+    patternHint: De 8 a 32 caracteres; letras, números y los signos _ . @ + -, sin espacios.
+    help: Cópiala del gestor de contraseñas; la herramienta de monitorización necesita la misma.
+  - id: privKey
+    label: Clave de cifrado SNMPv3
+    type: secret
+    example: Otra-Clave-Distinta9
+    pattern: '^[A-Za-z0-9_.@+-]{8,32}$'
+    patternHint: De 8 a 32 caracteres; letras, números y los signos _ . @ + -, sin espacios.
+    help: Cópiala del gestor de contraseñas; la herramienta de monitorización necesita la misma.
+    differentFrom:
+      param: authKey
+      hint: Usa una clave distinta de la de autenticación.
+  - id: aclName
+    label: Nombre de la ACL de control plane
+    type: text
+    example: SNMP-CONTROL-PLANE
+    pattern: '^[A-Za-z0-9_-]{1,64}$'
+    patternHint: Hasta 64 caracteres; letras, números, guion y guion bajo.
+  - id: location
+    label: Ubicación del switch
+    type: text
+    example: Sede-Central-Rack2
+    pattern: '^[A-Za-z0-9_.-]{1,64}$'
+    patternHint: Sin espacios; letras, números, punto, guion y guion bajo.
+  - id: contact
+    label: Contacto
+    type: text
+    example: sistemas
+    pattern: '^[A-Za-z0-9_.@-]{1,64}$'
+    patternHint: Sin espacios; letras, números, punto, guion, guion bajo y arroba.
+  - id: checkpointName
+    label: Nombre del checkpoint de respaldo
+    type: text
+    example: antes-snmp
+    pattern: '^(?!CPC)[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres; letras, números, guion y guion bajo; no puede empezar por CPC.
+  - id: minutes
+    label: Minutos de margen del modo auto
+    type: number
+    min: 1
+    max: 60
+    example: '10'
+    help: Tiempo para comprobar que sigues teniendo acceso antes de que el switch deshaga el cambio solo.
+preflight:
+  - text: Mira qué comunidades v2c existen. Si aparece public, el switch está usando la de fábrica.
+    command: show snmp community
+  - text: Mira qué usuarios SNMPv3 existen.
+    command: show snmpv3 users
+  - text: >-
+      Mira si ya hay una ACL aplicada al control plane. Solo puede haber una por VRF:
+      si ya existe, no sigas, porque la nueva la reemplazaría. Añade las reglas de
+      SNMP a la existente.
+    command: show running-config | include control-plane
+  - text: Guarda un checkpoint con la configuración actual.
+    command: copy running-config checkpoint {{checkpointName}}
+  - text: >-
+      Ten preparadas en el gestor de contraseñas dos claves distintas, una de
+      autenticación y otra de cifrado, de 8 a 32 caracteres. Evita espacios, comillas
+      y el signo ?, que la CLI interpreta. Ten a mano el acceso por consola.
+steps:
+  - title: Activar el modo checkpoint auto
+    commands:
+      - checkpoint auto {{minutes}}
+    explanation: >-
+      Abre una ventana de {{minutes}} minutos. Si no confirmas antes de que venza, el
+      switch restaura la configuración que tenía en este momento. Te protege si la ACL
+      de control plane te deja sin acceso.
+  - title: Entrar en modo configuración
+    commands:
+      - config
+    explanation: Pasa a configuración global. El prompt cambia a switch(config)#.
+  - title: Crear la ACL de control plane
+    commands:
+      - access-list ip {{aclName}}
+      - 10 permit udp {{nmsIp}} any eq 161
+      - 20 deny udp any any eq 161 log
+      - 30 permit any any any
+      - exit
+    explanation: >-
+      Permite SNMP solo desde {{nmsIp}}, rechaza y registra SNMP desde cualquier otro
+      origen, y deja pasar el resto del tráfico hacia el switch.
+    warning: >-
+      La regla 30 es imprescindible. Sin ella, la ACL rechaza todo el tráfico de
+      gestión (SSH, web, DHCP) al aplicarla.
+    breakdown:
+      - token: 10 permit udp {{nmsIp}} any eq 161
+        meaning: Permite consultas SNMP (UDP 161) que vengan del servidor de monitorización.
+      - token: 20 deny udp any any eq 161 log
+        meaning: Rechaza SNMP desde cualquier otro origen y deja constancia en el registro.
+      - token: 30 permit any any any
+        meaning: Deja pasar todo lo demás, para no cortar el acceso de gestión.
+  - title: Aplicar la ACL al control plane
+    commands:
+      - apply access-list ip {{aclName}} control-plane vrf default
+    explanation: >-
+      Hace que la ACL filtre el tráfico dirigido al propio switch en la VRF default, la
+      única del 6100. Es la forma de limitar SNMPv3 por IP: AOS-CX no permite asociar
+      una ACL a un usuario SNMPv3.
+  - title: Definir ubicación y contacto
+    commands:
+      - snmp-server system-location {{location}}
+      - snmp-server system-contact {{contact}}
+    explanation: Datos que verá el sistema de monitorización para identificar el equipo.
+  - title: Reemplazar la comunidad public, escribiendo una a mano
+    manual: true
+    explanation: >-
+      Escribe snmp-server community seguido de una cadena larga y aleatoria, de hasta
+      32 caracteres, sin espacios ni signo ?, y pulsa Enter. Dentro del contexto de la
+      comunidad escribe access-level ro y después exit. Al crear una comunidad propia,
+      public se borra. Nadie va a usar esta comunidad, así que no hace falta
+      guardarla.
+    warning: >-
+      No borres la comunidad sin crear otra: si no queda ninguna, el switch vuelve a
+      crear public.
+  - title: Crear el usuario SNMPv3
+    commands:
+      - snmpv3 user {{snmpUser}} auth sha auth-pass plaintext {{authKey}} priv aes priv-pass plaintext {{privKey}}
+    explanation: >-
+      Crea el usuario de solo lectura con autenticación SHA y cifrado AES. El switch
+      guarda las claves cifradas en la configuración.
+    warning: >-
+      Usa aes, no des: con des el switch deshabilita el usuario. El comando lleva las
+      claves en claro: cuando lo pegues, no lo dejes en notas, chats ni capturas.
+    breakdown:
+      - token: auth sha auth-pass plaintext {{authKey}}
+        meaning: Autenticación SHA con la clave escrita en claro; el switch la cifra al guardarla.
+      - token: priv aes priv-pass plaintext {{privKey}}
+        meaning: Cifrado AES con la segunda clave. Sin esta parte el usuario no tendría cifrado (authPriv).
+  - title: Activar el agente SNMP
+    commands:
+      - snmp-server vrf default
+    explanation: >-
+      Hace que el agente SNMP escuche en la VRF default. Se activa al final, cuando la
+      comunidad de fábrica ya no existe y la ACL ya limita el acceso.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve al modo Manager.
+  - title: Comprobar el acceso y probar SNMP
+    manual: true
+    explanation: >-
+      Dentro de la ventana de {{minutes}} minutos, abre una sesión SSH nueva para
+      confirmar que sigues teniendo acceso. Después, en la herramienta de
+      monitorización configura SNMPv3 con el usuario {{snmpUser}}, nivel authPriv,
+      autenticación SHA y cifrado AES, con las mismas claves, y comprueba que el switch
+      responde. En NinjaOne, si el descubrimiento de red no lo encuentra, agrégalo a
+      mano con su IP.
+  - title: Confirmar el cambio
+    commands:
+      - checkpoint auto confirm
+    explanation: Termina el modo auto y deja el cambio como definitivo en ejecución.
+    warning: Si no ejecutas este comando a tiempo, el switch vuelve solo al estado anterior.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: Copia la configuración en ejecución a la de arranque.
+verification:
+  - command: show snmpv3 users
+    expect: El usuario {{snmpUser}} aparece con autenticación sha y privacidad aes.
+  - command: show snmp community
+    expect: Una sola comunidad, la que creaste, con Access-level ro. La comunidad public ya no aparece.
+  - command: show access-list ip {{aclName}}
+    expect: Las reglas 10, 20 y 30 en ese orden.
+  - command: show snmp vrf
+    expect: El agente escucha en la VRF default.
+rollback:
+  summary: >-
+    Mientras el modo auto esté activo, la vuelta atrás es no confirmar. Si ya
+    confirmaste, apaga el agente y quita la ACL del control plane, o vuelve al
+    checkpoint.
+  steps:
+    - title: Si todavía no confirmaste
+      manual: true
+      explanation: >-
+        No ejecutes checkpoint auto confirm. Cuando venza la ventana, el switch
+        restaura solo la configuración anterior.
+    - title: Si ya confirmaste, apagar el agente y quitar la ACL
+      commands:
+        - config
+        - no snmp-server vrf default
+        - no apply access-list ip {{aclName}} control-plane vrf default
+        - end
+        - write memory
+      explanation: >-
+        El agente deja de escuchar y la ACL deja de filtrar el tráfico hacia el switch.
+        La ACL, el usuario y la comunidad siguen existiendo, pero no se usan.
+    - title: 'Alternativa: volver al checkpoint'
+      commands:
+        - checkpoint rollback {{checkpointName}}
+        - write memory
+      explanation: Vuelve al estado guardado antes de empezar y lo deja también en la configuración de arranque.
+  lockoutRecovery: >-
+    Si pierdes el acceso con el modo auto activo, espera: al vencer la ventana el switch
+    recupera la configuración anterior. Si ya habías confirmado, entra por el puerto de
+    consola y quita la ACL con no apply access-list ip {{aclName}} control-plane vrf
+    default.
+sources:
+  - title: AOS-CX 10.15 Fundamentals Guide (4100i, 6000, 6100) — configurar SNMP
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_SNMP/cnf-snm.htm
+  - title: AOS-CX 10.15 SNMP/MIB Guide — snmp-server vrf
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/snmp_mib/Content/Chp_SNMP/SNMP_cmds/snm-ser-vrf.htm
+  - title: AOS-CX 10.15 SNMP/MIB Guide — snmp-server community
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/snmp_mib/Content/Chp_SNMP/SNMP_cmds/snm-ser-com.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — checkpoint auto
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/Chk_cmds/che-aut.htm
+  - title: HPE Networking Community — ACL para SNMPv3 en switches CX
+    url: https://community.networking.hpe.com/discussion/how-to-configuration-snmp-v3-acl-on-aruba-cx-switch
+  - title: HPE Networking Community — usuario SNMPv3 deshabilitado con DES
+    url: https://community.networking.hpe.com/discussion/snmpv3-on-aos-cx-user-is-disabled
+  - title: HPE Networking Community — restringir acceso de gestión con ACL de control plane
+    url: https://community.arubanetworks.com/discussion/how-to-apply-access-restriction-for-ssh-in-aruba-cx
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: AOS-CX 10.15
+  notes: >-
+    El comando snmpv3 user y la ACL de control plane siguen la guía interna de la
+    empresa, probada en un 6100 real, y coinciden con lo que se ve en la comunidad de
+    HPE: los switches CX no admiten ACL por usuario SNMPv3, DES deshabilita el usuario
+    y la ACL de control plane necesita un permit any any any al final. La guía de
+    ACL 10.15 para el 6100 confirma apply access-list ip ... control-plane vrf y que
+    cada VRF admite una sola ACL de control plane; la guía de ACL de gestión añade
+    sus reglas a esta misma ACL. La documentación oficial consultada no confirma que
+    el usuario SNMPv3 sea de solo lectura. El
+    filtro show running-config | include control-plane puede no mostrar la ACL en
+    algunas versiones. Falta probar este runbook completo en un 6100.

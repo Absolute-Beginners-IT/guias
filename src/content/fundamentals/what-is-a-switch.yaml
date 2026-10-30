@@ -1,0 +1,60 @@
+id: what-is-a-switch
+title: Qué es un switch y para qué sirve
+order: 1
+summary: >-
+  El switch es el equipo que conecta entre sí los ordenadores, impresoras, teléfonos,
+  cámaras y puntos de acceso de una red local, y decide por qué puerto sale cada trama.
+sections:
+  - heading: La idea en una frase
+    paragraphs:
+      - >-
+        Un switch es una caja con muchos puertos de red que hace que los equipos
+        conectados a ella puedan hablar entre sí. A diferencia de un simple repartidor,
+        no copia todo a todos: entrega cada mensaje solo por el puerto donde está su
+        destinatario.
+      - >-
+        En una empresa los switches son la base de todo lo demás. Si un switch falla o
+        se configura mal, no hay correo, ni archivos compartidos, ni teléfono, ni
+        internet para quienes cuelgan de él. Por eso este manual insiste tanto en los
+        riesgos y en cómo volver atrás.
+  - heading: Cómo decide por dónde enviar
+    paragraphs:
+      - >-
+        Cada equipo tiene una dirección física única, la dirección MAC. Cuando una trama
+        entra por un puerto, el switch apunta en su tabla de direcciones que esa MAC está
+        detrás de ese puerto. Cuando después llega una trama para esa MAC, la envía solo
+        por ese puerto.
+      - >-
+        Si todavía no conoce el destino, o si la trama es de difusión (dirigida a todos,
+        como cuando un equipo pregunta quién tiene una IP), la envía por todos los
+        puertos de la misma red. Ese reparto masivo es normal en pequeñas dosis, pero es
+        lo que convierte un bucle en un desastre.
+    points:
+      - 'Tabla de direcciones MAC: la lista que relaciona cada MAC con su puerto. Se aprende sola y caduca a los pocos minutos sin tráfico.'
+      - 'Trama: cada paquete de datos tal como viaja por el cable, con la MAC de origen y de destino.'
+      - 'Difusión (broadcast): una trama que va a todos los equipos de la misma red.'
+  - heading: Switch, router y punto de acceso
+    paragraphs:
+      - >-
+        El switch une equipos dentro de una misma red local. El router une redes
+        distintas, por ejemplo la oficina con internet, y decide por dónde va el tráfico
+        entre ellas según las direcciones IP. El punto de acceso es la puerta de entrada
+        inalámbrica: los equipos por wifi llegan a la red a través de él, y él a su vez
+        está conectado a un switch.
+      - >-
+        En la práctica las fronteras se mezclan: muchos switches gestionados también
+        pueden enrutar entre redes internas (switches de capa 3) y muchos routers traen
+        unos pocos puertos de switch. Lo importante es saber qué papel cumple cada
+        equipo en tu red.
+  - heading: Para qué lo vas a usar en el día a día
+    paragraphs:
+      - >-
+        La mayor parte del trabajo con switches es repetitivo y conviene hacerlo siempre
+        igual: dar de alta una red nueva (VLAN), dejar un puerto para un equipo concreto,
+        conectar otro switch, alimentar un punto de acceso o una cámara por el propio
+        cable, y vigilar que todo funciona. Cada una de esas tareas tiene su guía en este
+        manual.
+related:
+  - vlan-create
+  - port-access
+  - lldp-neighbors

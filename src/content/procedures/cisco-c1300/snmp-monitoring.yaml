@@ -1,0 +1,223 @@
+platform: cisco-c1300
+task: snmp-monitoring
+summary: >-
+  Activa el agente SNMP de un Cisco Catalyst 1300, que viene apagado de fábrica, con
+  un usuario SNMPv3 de solo lectura con autenticación SHA y cifrado AES, y limita las
+  consultas SNMP a la IP del servidor de monitorización con una ACL de gestión.
+risk:
+  level: high
+  reason: >-
+    La ACL de gestión se aplica a todos los accesos de gestión, no solo a SNMP:
+    termina con una denegación implícita, así que un error en sus reglas te deja sin
+    acceso por SSH o por la web.
+params:
+  - id: nmsIp
+    label: IP del servidor de monitorización
+    type: ipv4
+    example: 192.168.10.40
+  - id: snmpUser
+    label: Usuario SNMPv3
+    type: text
+    example: monitor
+    pattern: '^[A-Za-z0-9_-]{1,20}$'
+    patternHint: Hasta 20 caracteres; letras, números, guion y guion bajo.
+  - id: groupName
+    label: Grupo SNMPv3
+    type: text
+    example: monitor-ro
+    pattern: '^[A-Za-z0-9_-]{1,30}$'
+    patternHint: Hasta 30 caracteres; letras, números, guion y guion bajo.
+  - id: aclName
+    label: Nombre de la ACL de gestión
+    type: text
+    example: GESTION
+    pattern: '^[A-Za-z0-9_-]{1,32}$'
+    patternHint: Hasta 32 caracteres; letras, números, guion y guion bajo.
+  - id: location
+    label: Ubicación del switch
+    type: text
+    example: Sede-Central-Rack2
+    pattern: '^[A-Za-z0-9_.-]{1,160}$'
+    patternHint: Sin espacios; letras, números, punto, guion y guion bajo.
+  - id: contact
+    label: Contacto
+    type: text
+    example: sistemas
+    pattern: '^[A-Za-z0-9_.@-]{1,160}$'
+    patternHint: Sin espacios; letras, números, punto, guion, guion bajo y arroba.
+  - id: minutes
+    label: Minutos hasta el reinicio de seguridad
+    type: number
+    min: 5
+    max: 60
+    example: '15'
+    help: Si pierdes el acceso, el switch se reinicia pasado este tiempo y arranca con la configuración guardada.
+preflight:
+  - text: Mira si el agente ya está activo y qué comunidades existen. Si aparece alguna comunidad que no uses, bórrala después con no snmp-server community.
+    command: show snmp
+  - text: >-
+      Mira el Engine ID local y los usuarios SNMPv3 que ya existen. Si ya hay un
+      Engine ID y usuarios en uso, no lo cambies: cambiar el Engine ID borra todos los
+      usuarios SNMPv3.
+    command: show snmp engineID
+  - text: Lista los usuarios SNMPv3 actuales.
+    command: show snmp users
+  - text: >-
+      Mira si ya hay una ACL de gestión activa. Si la hay, detente: la lista activa no
+      se puede modificar, y esta guía la sustituiría.
+    command: show management access-class
+  - text: >-
+      Confirma que la configuración de arranque es buena, porque es a la que vuelve el
+      switch si se reinicia.
+    command: show startup-config
+  - text: >-
+      Ten preparadas en el gestor de contraseñas dos claves distintas, una de
+      autenticación y otra de cifrado, de hasta 32 caracteres. Las vas a escribir a mano
+      en la interfaz web.
+steps:
+  - title: Programar el reinicio de seguridad
+    commands:
+      - reload in {{minutes}}
+    explanation: >-
+      Programa un reinicio dentro de {{minutes}} minutos y pide confirmación. Si la ACL
+      de gestión te deja sin acceso, el switch se reinicia solo y arranca con la
+      configuración de arranque, que todavía no tiene el cambio.
+    warning: >-
+      Si olvidas cancelarlo, el switch se reinicia y corta todo el tráfico. Si haces el
+      cambio por consola, salta este paso y el de cancelar.
+  - title: Entrar en modo configuración
+    commands:
+      - configure terminal
+    explanation: Pasa de Privileged EXEC a configuración global. El prompt termina en (config)#.
+  - title: Definir el Engine ID local
+    commands:
+      - snmp-server engineID local default
+    explanation: >-
+      Genera el Engine ID a partir de la MAC del switch. Sin Engine ID local no se
+      pueden crear usuarios SNMPv3.
+    warning: >-
+      Salta este paso si show snmp engineID ya mostraba un Engine ID con usuarios en uso:
+      cambiarlo borra la base de usuarios SNMPv3, y el switch pide confirmación antes.
+  - title: Definir ubicación y contacto
+    commands:
+      - snmp-server location {{location}}
+      - snmp-server contact {{contact}}
+    explanation: Datos que verá el sistema de monitorización para identificar el equipo.
+  - title: Crear el grupo SNMPv3 con autenticación y cifrado
+    commands:
+      - snmp-server group {{groupName}} v3 priv
+    explanation: >-
+      Crea un grupo de SNMPv3 con nivel priv (authPriv): exige autenticación y cifrado.
+      Sin vista de lectura, el grupo puede leer todo excepto las tablas de comunidades y
+      de usuarios; sin vista de escritura, no puede escribir nada.
+    breakdown:
+      - token: v3 priv
+        meaning: SNMPv3 con autenticación y cifrado; noauth y auth serían niveles más débiles.
+  - title: Crear la ACL de gestión
+    commands:
+      - management access-list {{aclName}}
+      - permit ip-source {{nmsIp}} service snmp
+      - permit service ssh
+      - permit service https
+      - permit service http
+      - exit
+    explanation: >-
+      Crea la lista de accesos de gestión: SNMP solo desde {{nmsIp}}, y SSH y la web
+      desde cualquier origen, como hasta ahora. Cualquier otro acceso de gestión, incluido
+      SNMP desde otra IP y Telnet, queda denegado por la regla implícita del final.
+    warning: >-
+      La lista termina con una denegación implícita. Si administras el switch por otro
+      servicio, añade su regla permit antes de exit. Cuando ya no uses la web por HTTP,
+      puedes quitar permit service http.
+  - title: Activar la ACL de gestión
+    commands:
+      - management access-class {{aclName}}
+    explanation: Desde este momento el switch aplica la lista a todos los accesos de gestión.
+  - title: Activar el agente SNMP
+    commands:
+      - snmp-server server
+    explanation: Enciende el agente SNMP, que viene apagado de fábrica.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve a Privileged EXEC.
+  - title: Crear el usuario SNMPv3 en la interfaz web
+    manual: true
+    explanation: >-
+      Cisco indica que los usuarios SNMPv3 con autenticación y cifrado se crean en la
+      interfaz web. Entra en ella, ve a SNMP > Users y pulsa Add. Usuario {{snmpUser}},
+      Engine ID Local, grupo {{groupName}}, método de autenticación SHA (o SHA256 si tu
+      herramienta de monitorización lo admite) con tu clave de autenticación en texto
+      plano, y método de privacidad AES 128 con tu clave de cifrado. Pulsa Apply.
+    warning: Usa dos claves distintas y no las guardes en ningún otro sitio que el gestor de contraseñas.
+  - title: Comprobar el acceso y probar SNMP
+    manual: true
+    explanation: >-
+      Antes de que pasen los {{minutes}} minutos, abre una sesión SSH nueva para
+      confirmar que sigues teniendo acceso. Después, en la herramienta de monitorización
+      configura SNMPv3 con el usuario {{snmpUser}}, nivel authPriv, el mismo método de
+      autenticación y AES 128, con las mismas claves, y comprueba que el switch responde.
+  - title: Cancelar el reinicio de seguridad
+    commands:
+      - reload cancel
+    explanation: Cancela el reinicio programado. El switch responde Reload cancelled.
+    warning: No sigas sin ejecutar este paso; comprueba después con show reload que no queda ningún reinicio pendiente.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: >-
+      Copia la configuración en ejecución, incluido el usuario creado en la web, a la de
+      arranque. El switch pide confirmación.
+verification:
+  - command: show snmp
+    expect: SNMP está activo, y la ubicación y el contacto son los configurados. No queda ninguna comunidad que no uses.
+  - command: show snmp users
+    expect: '{{snmpUser}} aparece en el grupo {{groupName}} con autenticación SHA y privacidad AES.'
+  - command: show snmp groups
+    expect: '{{groupName}} aparece con versión v3 y nivel de seguridad priv.'
+  - command: show management access-list {{aclName}}
+    expect: Las cuatro reglas permit, en orden, empezando por la de SNMP desde {{nmsIp}}.
+  - command: show management access-class
+    expect: 'La ACL de gestión está activa usando la lista {{aclName}}.'
+rollback:
+  summary: Desactiva la ACL de gestión, apaga el agente y borra el usuario, el grupo y la lista.
+  steps:
+    - title: Desactivar la ACL de gestión y borrarla
+      commands:
+        - configure terminal
+        - no management access-class
+        - no management access-list {{aclName}}
+      explanation: El switch vuelve a aceptar la gestión sin restricciones de origen.
+    - title: Borrar el usuario y el grupo SNMPv3 y apagar el agente
+      commands:
+        - no snmp-server user {{snmpUser}} v3
+        - no snmp-server group {{groupName}} v3 priv
+        - no snmp-server server
+      explanation: Nadie puede consultar el switch por SNMP.
+    - title: Salir y guardar
+      commands:
+        - end
+        - write memory
+      explanation: Guarda la configuración sin SNMP.
+  lockoutRecovery: >-
+    Si la ACL de gestión te deja sin acceso con el reinicio programado, espera a que el
+    switch se reinicie y vuelva con la configuración anterior. Si ya lo habías
+    cancelado, entra por el puerto de consola, que la ACL de gestión no bloquea, y
+    ejecuta no management access-class en configuración global.
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — SNMP Commands
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/snmp-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — Management ACL Commands
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/management-acl-commands.html
+  - title: Cisco Catalyst 1300 Administration Guide — SNMP
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/Administration-Guide/catalyst-1300-admin-guide/snmp.html
+status:
+  level: docs-checked
+  reviewed: '2026-10-20'
+  firmware: CLI Guide y Administration Guide del Catalyst 1300
+  notes: >-
+    Sintaxis contrastada con la guía oficial de la CLI y la guía de administración.
+    La guía de la CLI indica que los usuarios SNMPv3 con autenticación y cifrado se
+    crean en la interfaz web, y su sintaxis no deja claro cómo elegir AES por CLI;
+    por eso ese paso se hace en la web. Falta probarla en un C1300 real, en especial la
+    ACL de gestión.

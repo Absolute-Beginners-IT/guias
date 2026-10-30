@@ -1,0 +1,18 @@
+id: syslog-remote
+title: Enviar los registros a un servidor syslog
+group: monitoring
+order: 2
+summary: Envía los mensajes de registro del switch a un servidor central, para conservarlos y poder buscarlos.
+explanation: >-
+  El switch guarda pocos registros y los pierde al reiniciarse. Enviarlos a un
+  servidor syslog central permite conservarlos, buscar qué pasó antes de una caída
+  y recibir alertas. La severidad decide desde qué nivel de importancia se envían
+  los mensajes; informational es lo habitual. Syslog viaja normalmente por UDP 514,
+  sin cifrar ni confirmar la entrega.
+risks:
+  - Configurar el envío no corta el tráfico ni el acceso.
+  - Un nivel de severidad demasiado detallado (debugging) puede generar mucho tráfico y llenar el servidor.
+  - Los mensajes viajan sin cifrar; no conviene enviarlos fuera de la red de gestión.
+prerequisites:
+  - La hora del switch ya está sincronizada con NTP.
+  - Conocer la IP del servidor syslog y que acepte mensajes desde la red de gestión.

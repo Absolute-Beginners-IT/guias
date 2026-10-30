@@ -1,0 +1,21 @@
+id: mgmt-ip
+title: Configurar la IP de gestión
+group: setup-access
+order: 3
+summary: Asigna al switch una dirección IP fija y una puerta de enlace para poder administrarlo por red.
+explanation: >-
+  Un switch de capa 2 no necesita IP para conmutar tráfico; la necesita para que tú
+  puedas entrar a gestionarlo por SSH o por web, y para que envíe sus registros y
+  responda a la monitorización. Esa IP vive en una interfaz lógica asociada a una
+  VLAN, la VLAN de gestión. La puerta de enlace hace falta para llegar al switch
+  desde otra red. Conviene que sea una IP fija, anotada en el inventario, y no una
+  entregada por DHCP que pueda cambiar.
+risks:
+  - Si cambias la IP por la que estás conectado, la sesión se corta en ese mismo momento.
+  - Una máscara o una puerta de enlace equivocadas dejan el switch inalcanzable desde otras redes aunque responda en la suya.
+  - Una IP duplicada con otro equipo provoca cortes intermitentes difíciles de diagnosticar.
+  - Si la VLAN de gestión no llega hasta tu equipo por los trunks, la IP es correcta pero no hay acceso.
+prerequisites:
+  - Tener reservada en el inventario una IP libre, con su máscara y su puerta de enlace.
+  - Hacer el cambio por consola siempre que sea posible.
+  - Tener una copia de la configuración hecha antes de empezar.

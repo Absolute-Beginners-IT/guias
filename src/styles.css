@@ -1,0 +1,1334 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f1f5f9;
+  --surface: #ffffff;
+  --text: #0f172a;
+  --muted: #5b6577;
+  --border: #e2e8f0;
+  --accent: #4f46e5;
+  --code-bg: #0f172a;
+  --code-text: #e6edf7;
+  --ok: #1b7a43;
+  --ok-bg: #e3f4ea;
+  --warn: #8a5a00;
+  --warn-bg: #fdf1d3;
+  --danger: #a4262c;
+  --danger-bg: #fbe4e5;
+  /* Cards float on a soft shadow; in dark mode a faint border keeps their edge visible. */
+  --card-border: transparent;
+  --card-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 6px 18px rgba(15, 23, 42, 0.07);
+}
+
+/* The theme picker sets data-theme on <html>; without it the system preference applies. */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b1120;
+  --surface: #131c2e;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --border: #243049;
+  --accent: #818cf8;
+  --code-bg: #070b14;
+  --ok: #6fd69a;
+  --ok-bg: #143523;
+  --warn: #f2c35b;
+  --warn-bg: #3a2c08;
+  --danger: #ff9a9f;
+  --danger-bg: #3f1719;
+  --card-border: rgba(148, 163, 184, 0.14);
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1120;
+    --surface: #131c2e;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --border: #243049;
+    --accent: #818cf8;
+    --code-bg: #070b14;
+    --ok: #6fd69a;
+    --ok-bg: #143523;
+    --warn: #f2c35b;
+    --warn-bg: #3a2c08;
+    --danger: #ff9a9f;
+    --danger-bg: #3f1719;
+    --card-border: rgba(148, 163, 184, 0.14);
+    --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.25);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    16px / 1.55 system-ui,
+    "Segoe UI",
+    sans-serif;
+}
+
+a {
+  color: var(--accent);
+}
+
+h1 {
+  margin: 0.2rem 0 0.5rem;
+  font-size: 1.9rem;
+  line-height: 1.2;
+}
+
+h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+p {
+  margin: 0.5rem 0;
+}
+
+.shell {
+  --header-height: 3.4rem;
+  min-height: 100vh;
+}
+
+.shell__header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  height: var(--header-height);
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.shell__title {
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.brand-tabs {
+  display: flex;
+  flex: 1;
+  gap: 0.25rem;
+  overflow-x: auto;
+}
+
+.brand-tabs--fixed {
+  flex: 0 0 auto;
+  padding-right: 0.5rem;
+  border-right: 1px solid var(--border);
+}
+
+.brand-tabs a {
+  padding: 0.35rem 0.8rem;
+  border-radius: 8px;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.brand-tabs a:hover {
+  color: var(--text);
+}
+
+.brand-tabs a[aria-current="page"] {
+  background: var(--accent);
+  color: var(--surface);
+  font-weight: 600;
+}
+
+.shell__search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.shell__search:hover,
+.shell__search:focus-visible {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+kbd {
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  font:
+    0.75rem ui-monospace,
+    "Cascadia Code",
+    Consolas,
+    monospace;
+}
+
+.palette__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12vh 1rem 1rem;
+  background: rgb(0 0 0 / 45%);
+}
+
+.palette {
+  width: min(40rem, 100%);
+  max-height: 70vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface);
+  box-shadow: 0 1rem 3rem rgb(0 0 0 / 35%);
+}
+
+.palette input {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 1.05rem;
+}
+
+.palette ul,
+.recents {
+  margin: 0;
+  padding: 0.3rem;
+  list-style: none;
+}
+
+.palette a,
+.recents a {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 0.4rem;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.palette a span,
+.recents a span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.palette a[aria-current="true"],
+.palette a:hover,
+.recents a:hover {
+  background: var(--border);
+}
+
+.palette__note,
+.palette__hint {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.palette__hint {
+  border-top: 1px solid var(--border);
+}
+
+.shell__toggle {
+  display: none;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--text);
+}
+
+/* The task list sits flush against the left edge and the page content starts right next to it. */
+.shell__body {
+  display: grid;
+  grid-template-columns: 17rem minmax(0, 1fr);
+}
+
+.shell__sidebar {
+  position: sticky;
+  top: var(--header-height);
+  align-self: start;
+  height: calc(100vh - var(--header-height));
+  padding: 1rem 0.75rem 2rem;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.shell__sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.shell__sidebar::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: var(--border);
+}
+
+.shell__main {
+  min-width: 0;
+  padding: 1.5rem 2.5rem 4rem;
+}
+
+/* A cap on line length keeps text readable on very wide screens. */
+.shell__main > * {
+  max-width: 76rem;
+}
+
+.task-nav a {
+  display: block;
+  padding: 0.3rem 0.6rem;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.93rem;
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+.task-nav a:hover {
+  background: var(--border);
+}
+
+.task-nav a[aria-current="page"] {
+  background: var(--accent);
+  color: var(--surface);
+  font-weight: 600;
+}
+
+.task-nav__sheet {
+  margin-bottom: 0.5rem;
+}
+
+.task-nav__group p {
+  margin: 0.9rem 0 0.25rem;
+  padding: 0 0.6rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.task-nav__group ul,
+.task-nav__group ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task-nav__flag {
+  display: block;
+  padding: 0 0.6rem 0.2rem;
+  color: var(--danger);
+  font-size: 0.72rem;
+}
+
+@media (max-width: 900px) {
+  .shell__toggle {
+    display: block;
+  }
+
+  /* Brands drop to a second, scrollable row instead of shrinking to nothing. */
+  .shell {
+    --header-height: 5.9rem;
+  }
+
+  .shell__header {
+    flex-wrap: wrap;
+    gap: 0.4rem 0.6rem;
+    height: auto;
+    min-height: var(--header-height);
+    padding: 0.5rem 1rem;
+  }
+
+  .shell__header .brand-tabs:not(.brand-tabs--fixed) {
+    flex-basis: 100%;
+    order: 1;
+  }
+
+  .shell__search kbd {
+    display: none;
+  }
+
+  .shell__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .shell__sidebar {
+    display: none;
+    position: static;
+    height: auto;
+    max-height: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .shell__sidebar--open {
+    display: block;
+  }
+
+  .shell__main {
+    padding: 1rem 1rem 3rem;
+  }
+}
+
+.eyebrow,
+.muted {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.lead {
+  font-size: 1.1rem;
+}
+
+.breadcrumb {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.breadcrumb a + a::before {
+  content: "›";
+  margin-right: 0.5rem;
+  color: var(--muted);
+}
+
+.page-header {
+  margin-bottom: 1.25rem;
+}
+
+.status-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.badge--ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.badge--warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.badge--danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.badge--neutral {
+  background: var(--border);
+}
+
+.risk,
+.section,
+.concept,
+.card {
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  box-shadow: var(--card-shadow);
+}
+
+.risk {
+  padding: 0.9rem 1.1rem;
+  border-left-width: 0.35rem;
+}
+
+.risk--low {
+  border-left-color: var(--ok);
+}
+
+.risk--medium {
+  border-left-color: var(--warn);
+}
+
+.risk--high {
+  border-left-color: var(--danger);
+}
+
+.risk ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.concept {
+  margin-top: 1rem;
+  padding: 0.7rem 1.1rem;
+}
+
+.concept summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.section {
+  margin-top: 1rem;
+  padding: 1.2rem 1.4rem;
+}
+
+.section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.8rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  height: 100%;
+  padding: 0.9rem 1rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.card:hover,
+.card:focus-visible {
+  border-color: var(--accent);
+}
+
+.card strong {
+  color: var(--accent);
+  font-size: 1.05rem;
+}
+
+.params {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.9rem;
+}
+
+.field label {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-weight: 600;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+.field input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.field__error {
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+.steps,
+.checks,
+.plain-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps > li,
+.checks > li,
+.plain-list > li {
+  padding: 0.8rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.steps > li:first-child,
+.checks > li:first-child,
+.plain-list > li:first-child {
+  border-top: 0;
+}
+
+.step__title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.step__title input {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.step--done h3 {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.command-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+pre {
+  flex: 1;
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  overflow-x: auto;
+  border-radius: 10px;
+  background: var(--code-bg);
+  color: var(--code-text);
+}
+
+pre code {
+  display: block;
+  font:
+    0.92rem / 1.6 ui-monospace,
+    "Cascadia Code",
+    Consolas,
+    monospace;
+  white-space: pre;
+}
+
+:not(pre) > code {
+  padding: 0.05rem 0.3rem;
+  border-radius: 0.25rem;
+  background: var(--border);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.9em;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.copy-button {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.copy-button:disabled {
+  border-color: var(--border);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.warning,
+.lockout {
+  padding: 0.5rem 0.8rem;
+  border-radius: 0.4rem;
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.lockout {
+  margin-top: 0.8rem;
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.alternatives {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.section-index {
+  position: sticky;
+  top: var(--header-height);
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 1rem;
+  padding: 0.5rem 0;
+  background: var(--bg);
+}
+
+.section-index button {
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.section-index button:hover,
+.section-index button:focus-visible {
+  border-color: var(--accent);
+}
+
+/* Keeps a section's heading clear of the sticky header and index when scrolled to. */
+.section {
+  scroll-margin-top: calc(var(--header-height) + 3.5rem);
+}
+
+.manual-tag {
+  display: inline-block;
+  margin: 0.4rem 0 0;
+  padding: 0.1rem 0.6rem;
+  border: 1px dashed var(--border);
+  border-radius: 0.4rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.breakdown {
+  margin: 0.5rem 0 0;
+}
+
+.breakdown > div {
+  display: grid;
+  grid-template-columns: minmax(6rem, max-content) 1fr;
+  gap: 0.8rem;
+  padding: 0.2rem 0;
+}
+
+.breakdown dd {
+  margin: 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+th,
+td {
+  padding: 0.45rem 0.5rem;
+  border-top: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+thead th {
+  border-top: 0;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.next-article {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.shell__main:focus {
+  outline: none;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skip-link {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 20;
+  padding: 0.5rem 0.9rem;
+  border: 0;
+  border-radius: 0.4rem;
+  background: var(--accent);
+  color: var(--surface);
+  font: inherit;
+  font-weight: 600;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
+.shell__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  padding: 1rem 2rem 2rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.notice {
+  margin-top: 0.8rem;
+  padding: 0.7rem 0.9rem;
+  border-left: 4px solid currentColor;
+  border-radius: 0.4rem;
+}
+
+.notice p {
+  margin: 0.3rem 0 0;
+}
+
+.notice--warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.theme-toggle {
+  display: grid;
+  place-items: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  color: var(--accent);
+}
+
+.field textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.record-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.9rem 0;
+  font-weight: 600;
+}
+
+.record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.status-total {
+  margin: 0 0 0.6rem;
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.status-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.status-summary li {
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.status-summary strong {
+  font-size: 1.15rem;
+}
+
+/* The matrix scrolls on its own on narrow screens instead of widening the page. */
+.status-matrix {
+  overflow-x: auto;
+}
+
+.status-matrix th[scope="row"] {
+  min-width: 14rem;
+  font-weight: 500;
+}
+
+.status-matrix__group th {
+  padding-top: 1rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.status-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.status-cell:hover .badge {
+  outline: 2px solid var(--accent);
+}
+
+.status-cell__meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.status-cell__stale {
+  color: var(--danger);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* Printing (or saving as PDF) keeps only the runbook, with the values already filled in. */
+@media print {
+  :root {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --text: #000000;
+    --muted: #444444;
+    --border: #cccccc;
+    --code-bg: #f3f4f6;
+    --code-text: #000000;
+    --card-shadow: none;
+    --card-border: #cccccc;
+  }
+
+  .shell__header,
+  .shell__sidebar,
+  .shell__footer,
+  .skip-link,
+  .section-index,
+  .alternatives,
+  .copy-button,
+  .link-button,
+  .record-actions {
+    display: none;
+  }
+
+  .shell__body {
+    display: block;
+  }
+
+  .shell__main {
+    padding: 0;
+  }
+
+  .section,
+  .step,
+  .checks > li {
+    break-inside: avoid;
+  }
+
+  pre {
+    white-space: pre-wrap;
+    border: 1px solid var(--border);
+  }
+}
+
+/* Network planner */
+.plan-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.plan-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: -1px;
+  padding: 0.5rem 0.9rem;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+}
+
+.plan-tabs button:hover {
+  color: var(--text);
+}
+
+.plan-tabs button[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.plan-tabs__count {
+  min-width: 1.3rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.plan-panel {
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
+}
+
+/* Positioned so the visually hidden headers stay inside the scroll box instead of widening the page. */
+.plan-table {
+  position: relative;
+  overflow-x: auto;
+  margin: 0.8rem 0;
+}
+
+.plan-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.plan-table th {
+  padding: 0.3rem 0.4rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.plan-table td {
+  padding: 0.3rem 0.4rem;
+  vertical-align: middle;
+}
+
+.plan-table input,
+.plan-table select {
+  width: 100%;
+  min-width: 7rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+.plan-table input[type="number"] {
+  min-width: 5rem;
+}
+
+.plan-core {
+  display: inline-block;
+  margin-top: 0.2rem;
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.plan-actions {
+  white-space: nowrap;
+}
+
+.plan-actions .link-button {
+  margin-right: 0.8rem;
+}
+
+.plan-add,
+.plan-open {
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+}
+
+.plan-add:disabled {
+  border-color: var(--border);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.plan-issues {
+  margin: 0 0 1rem;
+  padding: 0.7rem 0.9rem 0.7rem 2rem;
+  border-left: 4px solid var(--danger);
+  border-radius: 0.4rem;
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.plan-issues li + li {
+  margin-top: 0.3rem;
+}
+
+.plan-issues .link-button {
+  margin-left: 0.6rem;
+}
+
+.plan-switch h2 {
+  margin-top: 0;
+}
+
+.plan-steps {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-step {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.plan-step__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.plan-step__header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.plan-substeps {
+  padding-left: 1.2rem;
+}
+
+.plan-substeps li + li {
+  margin-top: 0.6rem;
+}
+
+.plan-commands {
+  margin: 0.6rem 0 0.8rem;
+}
+
+.plan-commands summary {
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.plan-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.8rem;
+}
+
+.plan-tools__import {
+  cursor: pointer;
+}
+
+.plan-tools__import:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.plan-tools .field__error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.plan-templates ul {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-template {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.8rem;
+}
+
+.plan-map {
+  margin-bottom: 1.2rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
+}
+
+.topology__canvas {
+  overflow-x: auto;
+}
+
+.topology svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.topology__node rect {
+  fill: var(--bg);
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+
+.topology__node--alone rect {
+  stroke: var(--danger);
+  stroke-dasharray: 6 4;
+}
+
+.topology__node text {
+  fill: var(--muted);
+  font-size: 12px;
+}
+
+.topology__node .topology__name {
+  fill: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.topology__node .topology__core {
+  fill: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.topology__node .topology__alone {
+  fill: var(--danger);
+  font-weight: 600;
+}
+
+.topology__link line {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.topology__link text {
+  fill: var(--text);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+}
+
+.topology__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  margin: 0.8rem 0 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  list-style: none;
+}
+
+.topology__swatch {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-right: 0.35rem;
+  border-radius: 999px;
+  vertical-align: -0.05rem;
+}
+
+@media print {
+  .plan-tabs,
+  .plan-open,
+  .plan-add,
+  .plan-tools {
+    display: none;
+  }
+}

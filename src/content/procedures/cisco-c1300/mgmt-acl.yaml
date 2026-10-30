@@ -1,0 +1,186 @@
+platform: cisco-c1300
+task: mgmt-acl
+summary: >-
+  Permite entrar a la gestión de un Cisco Catalyst 1300 por SSH y por web segura
+  (HTTPS) solo desde la red de administración, con una ACL de gestión y un
+  reinicio programado como red de seguridad.
+risk:
+  level: high
+  reason: >-
+    Al activar la lista, todo acceso de gestión que no esté permitido queda
+    denegado. Si tu propia red no está en la lista, pierdes el acceso por red en el
+    acto.
+params:
+  - id: aclName
+    label: Nombre de la lista
+    type: text
+    example: MGMT-ADMIN
+    pattern: '^[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres, sin espacios; letras, números, guion y guion bajo.
+  - id: adminNetwork
+    label: Red de administración
+    type: ipv4
+    example: 192.168.10.0
+    help: La dirección de red desde la que se gestionan los switches. Tu equipo tiene que estar dentro.
+  - id: adminMask
+    label: Máscara de la red de administración
+    type: ipv4
+    example: 255.255.255.0
+    help: En formato decimal con puntos.
+  - id: minutes
+    label: Minutos hasta el reinicio de seguridad
+    type: number
+    min: 5
+    max: 60
+    example: '15'
+    help: Si pierdes el acceso, el switch se reinicia pasado este tiempo y arranca con la configuración guardada.
+preflight:
+  - text: >-
+      Mira si ya hay una lista de gestión activa. De fábrica no hay ninguna
+      restricción.
+    command: show management access-class
+  - text: Mira qué listas de gestión existen, para no reutilizar el nombre {{aclName}}.
+    command: show management access-list
+  - text: >-
+      Confirma que la IP de tu equipo está dentro de {{adminNetwork}} con la máscara
+      {{adminMask}}. Si gestionas el switch por SNMP, HTTP o Telnet desde otras
+      direcciones, ese acceso también quedará bloqueado.
+  - text: >-
+      Confirma que la configuración de arranque es buena, porque es a la que vuelve
+      el switch si se reinicia. No tiene que haber cambios sin guardar que quieras
+      conservar.
+    command: show startup-config
+  - text: Hazlo por el puerto de consola si puedes; así no dependes del acceso que vas a restringir.
+steps:
+  - title: Programar el reinicio de seguridad
+    commands:
+      - reload in {{minutes}}
+    explanation: >-
+      Programa un reinicio dentro de {{minutes}} minutos y pide confirmación. Si el
+      cambio te deja sin acceso, el switch se reinicia solo y arranca con la
+      configuración de arranque, que todavía no tiene la lista.
+    warning: >-
+      Si olvidas cancelarlo, el switch se reinicia y corta todo el tráfico. Si haces
+      el cambio por consola, salta este paso y el de cancelar.
+    breakdown:
+      - token: reload in
+        meaning: Programa un reinicio diferido en vez de reiniciar ahora.
+      - token: '{{minutes}}'
+        meaning: Minutos de espera. También admite el formato horas:minutos.
+  - title: Crear la lista de gestión
+    commands:
+      - configure terminal
+      - management access-list {{aclName}}
+    explanation: >-
+      Crea la lista y entra en su modo de configuración. El prompt termina en
+      (config-macl)#.
+  - title: Permitir SSH y HTTPS desde la red de administración
+    commands:
+      - permit ip-source {{adminNetwork}} mask {{adminMask}} service ssh
+      - permit ip-source {{adminNetwork}} mask {{adminMask}} service https
+    explanation: >-
+      Añade dos reglas al final de la lista: SSH y web segura desde la red de
+      administración. Todo lo que no coincida con una regla queda denegado, porque
+      la lista termina con una denegación implícita.
+    warning: >-
+      Si monitorizas el switch por SNMP, añade antes de salir una regla igual con la
+      IP del servidor de monitorización y service snmp, o dejará de responder.
+    breakdown:
+      - token: permit ip-source {{adminNetwork}}
+        meaning: Permite el tráfico de gestión que venga de esta dirección de origen.
+      - token: mask {{adminMask}}
+        meaning: Máscara de la red de origen. También admite una barra y la longitud del prefijo.
+      - token: service ssh
+        meaning: Limita la regla a un servicio. Los posibles son telnet, ssh, http, https y snmp.
+  - title: Salir de la lista
+    commands:
+      - exit
+    explanation: Vuelve a configuración global. La lista existe pero todavía no restringe nada.
+  - title: Activar la lista
+    commands:
+      - management access-class {{aclName}}
+    explanation: >-
+      Hace que {{aclName}} sea la lista de gestión activa. Desde aquí, solo se
+      aceptan conexiones de gestión que cumplan sus reglas.
+    warning: Si tu equipo no está en la red de administración, pierdes el acceso por red en este paso.
+    breakdown:
+      - token: management access-class
+        meaning: Elige la lista de gestión activa. Con console-only, el switch solo se gestiona por consola.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve a Privileged EXEC.
+  - title: Entrar desde la red de administración
+    manual: true
+    explanation: >-
+      Sin cerrar esta sesión, abre una sesión SSH nueva desde un equipo de
+      {{adminNetwork}} y entra también por HTTPS. Si puedes, comprueba que desde un
+      equipo fuera de esa red no se puede entrar. Hazlo antes de que pasen los
+      {{minutes}} minutos.
+  - title: Cancelar el reinicio de seguridad
+    commands:
+      - reload cancel
+    explanation: Cancela el reinicio programado. El switch responde Reload cancelled.
+    warning: No sigas sin ejecutar este paso; comprueba después con show reload que no queda ningún reinicio pendiente.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: >-
+      Copia la configuración en ejecución a la de arranque. El switch pide
+      confirmación antes de sobrescribirla.
+verification:
+  - command: show management access-class
+    expect: Dice Management access-class is enabled, using access list {{aclName}}.
+  - command: show management access-list {{aclName}}
+    expect: >-
+      Aparecen las dos reglas permit con {{adminNetwork}}, una con service ssh y
+      otra con service https, y la nota de que el resto del acceso queda denegado.
+  - command: show reload
+    expect: Después de cancelar, no hay ningún reinicio programado.
+rollback:
+  summary: >-
+    Antes de guardar, la vuelta atrás es dejar que el reinicio de seguridad actúe.
+    En cualquier momento, desde consola o desde la red de administración, se
+    desactiva la lista y después se borra.
+  steps:
+    - title: Si perdiste el acceso y el reinicio sigue programado
+      manual: true
+      explanation: >-
+        Espera. Al cumplirse el tiempo el switch se reinicia y arranca con la
+        configuración de arranque, sin la lista. El reinicio corta el tráfico
+        durante el arranque.
+    - title: Desactivar y borrar la lista
+      commands:
+        - configure terminal
+        - no management access-class
+        - no management access-list {{aclName}}
+        - end
+      explanation: >-
+        Quita la restricción de gestión y después borra la lista. Va en este orden
+        porque la lista activa no se puede modificar ni borrar.
+    - title: Si ya habías guardado con write memory
+      commands:
+        - write memory
+      explanation: Guarda de nuevo para que la vuelta atrás sobreviva a un reinicio.
+  lockoutRecovery: >-
+    Si pierdes el acceso con el reinicio programado, espera a que el switch se
+    reinicie y vuelva sin la lista. Si no lo habías programado o ya lo cancelaste,
+    entra por el puerto de consola, que no es una conexión de red, y desactiva la
+    lista con no management access-class.
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — Management ACL Commands
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/management-acl-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — System Management Commands (reload)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/system-management-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — File System Commands (write memory)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/file-system-commands.html
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: >-
+    Sintaxis contrastada con la guía oficial de la CLI. La guía escribe los
+    servicios con mayúsculas (SSH, HTTPS) y su ejemplo de salida en minúsculas
+    (service telnet); aquí se usan en minúsculas. La guía no dice si al activar la
+    lista se corta una sesión ya abierta, ni afirma de forma literal que la consola
+    quede fuera de la lista. Falta probarla en un C1300 real.

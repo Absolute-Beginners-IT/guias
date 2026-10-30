@@ -1,0 +1,123 @@
+platform: mikrotik-routeros
+task: firmware-upgrade
+summary: >-
+  Actualiza RouterOS en un MikroTik desde los servidores del fabricante y después
+  actualiza el cargador de arranque RouterBOOT. Necesita que el equipo tenga salida
+  a internet.
+risk:
+  level: high
+  reason: >-
+    El equipo se reinicia, dos veces en total, y corta todo el tráfico en cada
+    arranque. RouterOS no guarda una segunda imagen: volver a la versión anterior
+    exige reinstalarla.
+params:
+  - id: backupName
+    label: Nombre de la copia de respaldo
+    type: text
+    example: crs317-antes-firmware
+    pattern: '^(flash/)?[A-Za-z0-9_-]{1,40}$'
+    patternHint: Hasta 40 caracteres; letras, números, guion y guion bajo, sin extensión. Puede empezar por flash/.
+    help: Si el equipo tiene carpeta flash, escribe flash/ delante del nombre para que sobreviva al reinicio.
+preflight:
+  - text: Anota la versión instalada de cada paquete.
+    command: /system package print
+  - text: >-
+      Guarda una copia completa de la configuración y descárgala fuera del equipo
+      antes de seguir.
+    command: /system backup save name={{backupName}}
+  - text: Guarda también la exportación en texto, que sirve aunque cambie la versión.
+    command: /export file={{backupName}}
+  - text: >-
+      Si el equipo está en RouterOS 6, no se puede saltar directo a la última
+      versión 7: hay que pasar primero por la 7.12.1. Lee las notas de la versión.
+  - text: >-
+      El equipo necesita salida a internet por HTTPS (TCP 443) hacia los servidores
+      de MikroTik. Si no la tiene, la actualización se hace subiendo el paquete a
+      mano y está fuera de esta guía.
+steps:
+  - title: Buscar actualizaciones
+    commands:
+      - /system package update check-for-updates once
+    explanation: >-
+      Consulta a los servidores de MikroTik si hay una versión más nueva en el canal
+      configurado. Para producción el canal tiene que ser stable o long-term, nunca
+      testing ni development.
+    breakdown:
+      - token: /system package update
+        meaning: Menú de actualización de RouterOS.
+      - token: check-for-updates once
+        meaning: Hace una única consulta y muestra la versión instalada y la disponible.
+  - title: Instalar la actualización
+    commands:
+      - /system package update install
+    explanation: >-
+      Descarga la versión nueva y la instala. Para aplicarla el equipo se reinicia.
+    warning: >-
+      Se corta todo el tráfico del switch durante el reinicio. No lo apagues
+      mientras descarga e instala.
+  - title: Esperar el arranque y comprobar la versión
+    commands:
+      - /system package print
+    explanation: >-
+      Vuelve a entrar cuando termine de arrancar y confirma que los paquetes muestran
+      la versión nueva. Si no cambió, revisa el registro con /log print.
+  - title: Actualizar el cargador de arranque
+    commands:
+      - /system routerboard upgrade
+    explanation: >-
+      Actualiza RouterBOOT, el cargador de arranque del equipo. El fabricante
+      recomienda hacerlo después de cada actualización de RouterOS. Pide
+      confirmación.
+  - title: Reiniciar para aplicar el cargador de arranque
+    commands:
+      - /system reboot
+    explanation: El cargador nuevo solo se aplica al reiniciar. Pide confirmación.
+    warning: Vuelve a cortar todo el tráfico durante el reinicio.
+verification:
+  - command: /system package print
+    expect: Todos los paquetes muestran la versión nueva.
+  - command: /interface bridge vlan print
+    expect: La tabla de VLAN del bridge es la misma que antes de actualizar.
+  - command: /interface bridge port print
+    expect: Los puertos del bridge conservan la marca H (hw-offload).
+rollback:
+  summary: >-
+    RouterOS no conserva la versión anterior. Volver atrás exige subir al equipo los
+    paquetes de la versión antigua e instalarlos, y después cargar la copia de
+    configuración hecha antes de empezar.
+  steps:
+    - title: Reinstalar la versión anterior
+      manual: true
+      explanation: >-
+        Descarga de la web de MikroTik el paquete de la versión anterior para la
+        arquitectura del equipo, súbelo con WinBox o SFTP y sigue el procedimiento
+        de bajada de versión del fabricante. Ese procedimiento no está contrastado
+        en esta guía.
+    - title: Restaurar la configuración anterior
+      commands:
+        - /system backup load name={{backupName}}
+      explanation: >-
+        Una vez en la versión anterior, carga la copia hecha antes de actualizar. El
+        equipo se reinicia. La copia binaria solo es fiable en la misma versión en
+        que se creó.
+      warning: Vuelve a cortar todo el tráfico durante el reinicio.
+  lockoutRecovery: >-
+    Si después de actualizar no puedes entrar por red, conéctate por consola y
+    revisa la configuración. Si el equipo no arranca, la recuperación se hace con la
+    herramienta Netinstall del fabricante, y está fuera de esta guía.
+sources:
+  - title: RouterOS — Upgrading and installation
+    url: https://help.mikrotik.com/docs/display/ROS/Upgrading+and+installation
+  - title: RouterOS — Backup
+    url: https://help.mikrotik.com/docs/display/ROS/Backup
+status:
+  level: unverified
+  reviewed: '2026-10-13'
+  firmware: RouterOS 7
+  notes: >-
+    Marcada sin verificar porque la vuelta atrás no está contrastada: la página
+    oficial consultada no describe la bajada de versión. Sí están contrastados
+    check-for-updates, install, routerboard upgrade, system reboot, package print,
+    la recomendación de actualizar RouterBOOT y el paso obligado por la 7.12.1
+    desde RouterOS 6. La página no dice de forma literal que install reinicie el
+    equipo. Falta probar la guía en un equipo real.

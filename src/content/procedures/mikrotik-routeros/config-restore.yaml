@@ -1,0 +1,95 @@
+platform: mikrotik-routeros
+task: config-restore
+summary: >-
+  Restaura una copia binaria (.backup) en un MikroTik con RouterOS. El equipo se
+  reinicia y arranca con la configuración de la copia.
+risk:
+  level: high
+  reason: >-
+    El switch se reinicia, así que todo el tráfico que pasa por él se corta durante
+    el arranque, y la configuración entera se sustituye por la de la copia.
+params:
+  - id: backupName
+    label: Copia a restaurar
+    type: text
+    example: crs317-antes-vlan-20
+    pattern: '^(flash/)?[A-Za-z0-9_-]{1,40}$'
+    patternHint: Hasta 40 caracteres; letras, números, guion y guion bajo, sin extensión. Puede empezar por flash/.
+    help: Nombre del archivo .backup que está en el equipo, sin la extensión.
+  - id: currentBackup
+    label: Nombre para guardar el estado actual
+    type: text
+    example: crs317-antes-de-restaurar
+    pattern: '^(flash/)?[A-Za-z0-9_-]{1,40}$'
+    patternHint: Hasta 40 caracteres; letras, números, guion y guion bajo, sin extensión. Puede empezar por flash/.
+    help: Copia del estado de ahora, para poder volver si la restauración no era lo que querías.
+preflight:
+  - text: >-
+      Confirma que el archivo {{backupName}}.backup está en el equipo. Si no está,
+      súbelo antes con WinBox o SFTP.
+    command: /file print
+  - text: >-
+      La copia tiene que ser de este mismo equipo y de la misma versión de RouterOS:
+      restaura también las direcciones MAC.
+  - text: >-
+      Guarda el estado actual. Si el equipo tiene carpeta flash, el nombre tiene que
+      empezar por flash/ o el archivo se pierde en el reinicio.
+    command: /system backup save name={{currentBackup}}
+  - text: >-
+      Safe Mode no protege esta operación, porque el equipo se reinicia. Ten acceso
+      por consola y hazlo en una ventana de mantenimiento.
+steps:
+  - title: Cargar la copia
+    commands:
+      - /system backup load name={{backupName}}
+    explanation: >-
+      Pide la contraseña de la copia (déjala vacía si se guardó sin contraseña) y
+      después pregunta Restore and reboot? [y/N]. Al responder y, restaura la
+      configuración y reinicia el equipo.
+    warning: Al confirmar con y se corta el tráfico del switch hasta que termina de arrancar.
+    breakdown:
+      - token: /system backup load
+        meaning: Sustituye toda la configuración por la de una copia binaria y reinicia.
+      - token: name={{backupName}}
+        meaning: Archivo .backup de origen, tal como aparece en /file print.
+  - title: Esperar el reinicio y volver a entrar
+    manual: true
+    explanation: >-
+      Conéctate de nuevo cuando el equipo termine de arrancar. Ten en cuenta que la
+      IP de gestión y los usuarios son ahora los de la copia.
+verification:
+  - command: /export
+    expect: La configuración mostrada coincide con la del momento en que se creó {{backupName}}.
+  - command: /interface bridge vlan print
+    expect: La tabla de VLAN del bridge es la que esperabas después de restaurar.
+rollback:
+  summary: >-
+    La vuelta atrás es cargar la copia del estado que guardaste antes de empezar.
+    Implica otro reinicio.
+  steps:
+    - title: Volver al estado anterior a la restauración
+      commands:
+        - /system backup load name={{currentBackup}}
+      explanation: >-
+        Carga la copia hecha en Antes de empezar y reinicia el equipo otra vez.
+      warning: Vuelve a cortar el tráfico durante el arranque.
+  lockoutRecovery: >-
+    Si después del reinicio no puedes entrar por red, comprueba primero que estás
+    usando la IP y el usuario de la copia restaurada. Si aun así no hay acceso,
+    conéctate por el puerto de consola y carga desde ahí la copia del estado
+    anterior.
+sources:
+  - title: RouterOS — Backup
+    url: https://help.mikrotik.com/docs/display/ROS/Backup
+  - title: RouterOS — Configuration Management
+    url: https://help.mikrotik.com/docs/display/ROS/Configuration+Management
+  - title: RouterOS — Bridge VLAN Table
+    url: https://help.mikrotik.com/docs/display/ROS/Bridge+VLAN+Table
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: RouterOS 7
+  notes: >-
+    backup load y su diálogo de confirmación están contrastados con la documentación
+    oficial. No se comprobó en la documentación el acceso por consola del CRS317 ni
+    cuánto tarda el reinicio. Falta probar la guía en un equipo real.

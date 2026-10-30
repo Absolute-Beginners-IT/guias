@@ -1,0 +1,62 @@
+platform: cisco-c1300
+task: lldp-neighbors
+summary: >-
+  Muestra qué equipo hay al otro lado de cada puerto de un Cisco Catalyst 1300 y,
+  si hiciera falta, vuelve a activar LLDP.
+risk:
+  level: low
+  reason: Consultar vecinos no cambia nada; LLDP viene activado de fábrica.
+params:
+  - id: interfaceId
+    label: Puerto a consultar en detalle
+    type: text
+    example: gi1/0/48
+    pattern: '^(gi|te|tw|fi)\d+/0/\d+$'
+    patternHint: Tipo y número en formato unidad/0/puerto, por ejemplo gi1/0/48.
+preflight:
+  - text: >-
+      LLDP viene activado de fábrica en todo el switch y en todos los puertos. El
+      último paso solo hace falta si alguien lo desactivó.
+steps:
+  - title: Ver todos los vecinos
+    commands:
+      - show lldp neighbors
+    explanation: Lista, por cada puerto local, el equipo vecino que se anuncia por LLDP.
+  - title: Ver el detalle de un puerto
+    commands:
+      - show lldp neighbors {{interfaceId}}
+    explanation: Muestra todo lo que anuncia el vecino de {{interfaceId}}.
+  - title: 'Si la lista sale vacía: activar LLDP'
+    commands:
+      - configure terminal
+      - lldp run
+      - end
+    explanation: >-
+      Activa LLDP en todo el switch. Si ya estaba activo no cambia nada. Cada puerto
+      tiene además lldp transmit y lldp receive, activados de fábrica.
+verification:
+  - command: show lldp configuration
+    expect: LLDP figura activo y los puertos transmiten y reciben.
+  - command: show lldp neighbors
+    expect: Aparecen los switches, teléfonos y puntos de acceso conectados, cada uno en su puerto.
+rollback:
+  summary: >-
+    Consultar no requiere vuelta atrás. Si activaste LLDP y antes estaba desactivado
+    a propósito, vuelve a desactivarlo.
+  steps:
+    - title: Desactivar LLDP de nuevo
+      commands:
+        - configure terminal
+        - no lldp run
+        - end
+      explanation: Desactiva LLDP en todo el switch.
+      warning: Teléfonos y puntos de acceso que dependen de LLDP pueden dejar de configurarse bien.
+  lockoutRecovery: Esta guía no afecta al acceso de gestión.
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — LLDP Commands
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/lldp-commands.html
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: Sintaxis y valores de fábrica contrastados con la guía oficial de la CLI; falta probarla en un C1300 real.

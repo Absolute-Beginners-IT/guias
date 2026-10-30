@@ -1,0 +1,25 @@
+id: dhcp-snooping
+title: Bloquear servidores DHCP falsos (DHCP snooping)
+group: security-resilience
+order: 2
+summary: >-
+  Activa DHCP snooping en una VLAN y marca como confiable solo el puerto por el que
+  llega el servidor DHCP legítimo.
+explanation: >-
+  Cuando un equipo se conecta, pide una dirección IP por DHCP y acepta la primera
+  respuesta que llega. Si alguien conecta un router doméstico o configura un servidor
+  DHCP por error, los equipos reciben direcciones falsas y se quedan sin red, o su
+  tráfico pasa por un equipo que no controlas. DHCP snooping divide los puertos en
+  confiables y no confiables: las respuestas de servidor DHCP solo se aceptan por los
+  confiables, que son el que va hacia el servidor DHCP y los enlaces a otros
+  switches. Además, el switch apunta qué IP recibió cada equipo y en qué puerto, una
+  tabla que usan otras protecciones como IP Source Guard o la inspección de ARP.
+risks:
+  - Si el puerto hacia el servidor DHCP o el enlace al switch troncal no queda como confiable, nadie de la VLAN recibe dirección al renovarla.
+  - Marcar como confiable un puerto de usuario deja pasar un servidor DHCP falso por ese puerto.
+  - Algunos servidores rechazan las peticiones con la opción 82 que añade el switch; si los equipos dejan de recibir IP, es lo primero que hay que mirar.
+  - Los equipos que ya tienen dirección no notan el cambio hasta que la renuevan, así que un error puede tardar horas en verse.
+prerequisites:
+  - Saber por qué puerto llega el servidor DHCP de esa VLAN, directamente o a través de otro switch.
+  - Probar primero en una sola VLAN y forzar la renovación en un equipo de prueba.
+  - Tener una copia de la configuración hecha antes de empezar.

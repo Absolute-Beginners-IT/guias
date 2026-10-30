@@ -1,0 +1,171 @@
+platform: aruba-aoscx
+task: stp-edge-protection
+summary: >-
+  Comprueba que Spanning Tree está activo en un Aruba CX 6100 y en qué modo, y marca
+  un puerto de acceso como admin-edge con BPDU Guard, para que un switch conectado
+  por error en esa toma apague el puerto en lugar de formar un bucle.
+risk:
+  level: medium
+  reason: >-
+    Si el puerto elegido va en realidad a otro switch, marcarlo como edge le quita la
+    protección contra bucles, y BPDU Guard lo apaga en cuanto recibe una BPDU,
+    cortando a todos los equipos de detrás. Si Spanning Tree estaba desactivado,
+    activarlo recalcula la topología y corta el tráfico unos segundos.
+params:
+  - id: interfaceId
+    label: Puerto de acceso
+    type: text
+    example: 1/1/8
+    pattern: '^\d+/\d+/\d+$'
+    patternHint: Formato miembro/slot/puerto, por ejemplo 1/1/8.
+    help: Un puerto con un solo equipo final, nunca un enlace a otro switch o a un punto de acceso con switch interno.
+  - id: checkpointName
+    label: Nombre del checkpoint de respaldo
+    type: text
+    example: antes-stp-1-1-8
+    pattern: '^(?!CPC)[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres; letras, números, guion y guion bajo; no puede empezar por CPC.
+preflight:
+  - text: >-
+      Mira si Spanning Tree está activo y en qué modo. Busca Spanning tree status:
+      Enabled y el protocolo, MSTP (el de fábrica en el 6100) o RPVST. Si aparece
+      Disabled, el paso de activarlo lo enciende en modo MSTP; hazlo fuera del
+      horario de trabajo.
+    command: show spanning-tree
+  - text: >-
+      Mira qué puertos tienen ya BPDU Guard y si hay un tiempo de reactivación
+      automática (BPDU guard timeout value). None significa que un puerto apagado
+      queda así hasta que lo reactives a mano.
+    command: show spanning-tree summary port
+  - text: >-
+      Confirma que el puerto es de acceso, con una sola VLAN, y que no es el enlace
+      hacia otro switch ni el puerto por el que estás conectado.
+    command: show interface {{interfaceId}}
+  - text: Guarda un checkpoint con la configuración actual.
+    command: copy running-config checkpoint {{checkpointName}}
+steps:
+  - title: Entrar en modo configuración
+    commands:
+      - config
+    explanation: Pasa a configuración global. El prompt cambia a switch(config)#.
+  - title: Asegurar que Spanning Tree está activo
+    commands:
+      - spanning-tree
+    explanation: >-
+      Activa Spanning Tree en el switch, en el modo que tenga configurado (MSTP si
+      nadie lo cambió). Si ya estaba activo, no cambia nada.
+    warning: >-
+      Si la comprobación previa mostró Disabled, este comando recalcula la topología y
+      puede cortar el tráfico unos segundos. No cambies el modo (spanning-tree mode)
+      en este runbook: el resto de switches de la red tiene que usar uno compatible.
+  - title: Entrar en la configuración del puerto
+    commands:
+      - interface {{interfaceId}}
+    explanation: Entra en el contexto del puerto. El prompt queda en switch(config-if)#.
+  - title: Activar BPDU Guard en el puerto
+    commands:
+      - spanning-tree bpdu-guard
+    explanation: >-
+      Si por este puerto llega una BPDU, es decir, si alguien conecta un switch, el
+      6100 desactiva el puerto y envía una alerta por SNMP.
+    breakdown:
+      - token: spanning-tree bpdu-guard
+        meaning: Activa la protección BPDU Guard solo en el puerto donde estás.
+  - title: Marcar el puerto como admin-edge
+    commands:
+      - spanning-tree port-type admin-edge
+    explanation: >-
+      El puerto pasa a reenviar tráfico en cuanto se conecta un equipo, sin esperar
+      a Spanning Tree. Evita que el ordenador tarde en recibir dirección por DHCP.
+    breakdown:
+      - token: spanning-tree port-type
+        meaning: Define el tipo de puerto para Spanning Tree.
+      - token: admin-edge
+        meaning: >-
+          Puerto de borde fijado por el administrador. El valor por defecto es
+          admin-network, que espera 3 segundos a ver si llegan BPDU antes de decidir.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve al modo Manager.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: Copia la configuración en ejecución a la de arranque.
+verification:
+  - command: show spanning-tree
+    expect: >-
+      Spanning tree status: Enabled, y el puerto {{interfaceId}} en estado
+      Forwarding con Type P2P Edge.
+  - command: show spanning-tree summary port
+    expect: El puerto {{interfaceId}} aparece en la lista BPDU guard enabled interfaces.
+  - command: show interface {{interfaceId}}
+    expect: El puerto está up y el equipo conectado tiene red.
+rollback:
+  summary: >-
+    Quita BPDU Guard y el tipo edge del puerto, o vuelve al checkpoint. Si el puerto
+    ya se apagó por BPDU Guard, quita primero el equipo que manda BPDU y reactívalo.
+  steps:
+    - title: Quitar la protección del puerto
+      commands:
+        - config
+        - interface {{interfaceId}}
+        - no spanning-tree bpdu-guard
+        - no spanning-tree port-type
+        - end
+        - write memory
+      explanation: >-
+        Desactiva BPDU Guard y devuelve el puerto al tipo por defecto, admin-network.
+        Spanning Tree sigue activo en el switch.
+    - title: Reactivar un puerto apagado por BPDU Guard
+      commands:
+        - config
+        - interface {{interfaceId}}
+        - shutdown
+        - no shutdown
+        - end
+      explanation: >-
+        Úsalo cuando show spanning-tree muestre el puerto en estado Bpdu-Error. Antes,
+        desconecta el switch o el equipo que mandaba BPDU; si sigue conectado, el
+        puerto se vuelve a apagar enseguida.
+      warning: >-
+        La documentación oficial dice que el puerto queda desactivado hasta que se
+        reactive a mano, pero no describe con qué comando. Si este no lo recupera,
+        quita y vuelve a poner spanning-tree bpdu-guard en el puerto.
+    - title: 'Alternativa: volver al checkpoint'
+      commands:
+        - checkpoint rollback {{checkpointName}}
+        - write memory
+      explanation: Vuelve al estado guardado antes de empezar y lo deja también en la configuración de arranque.
+  lockoutRecovery: >-
+    Si BPDU Guard apagó el puerto por el que gestionabas el switch, entra por otro
+    puerto o por la consola, desconecta el equipo que manda BPDU y reactiva el puerto
+    con shutdown y no shutdown en su interfaz.
+sources:
+  - title: AOS-CX 10.15 Layer-2 Bridging Guide (4100i, 6000, 6100, 5420, 6200) — Spanning tree on edge ports
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/l2_bridging_4100i-6000-6100-5420-6200/Content/Chp_stp/use-case_SpanEdgePortst.htm
+  - title: AOS-CX 10.15 Layer-2 Bridging Guide — spanning-tree bpdu-guard
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/l2_bridging_4100i-6000-6100-5420-6200/Content/Chp_stp/mstp_cmds/spa-tre-bpd-gua-10.htm
+  - title: AOS-CX 10.15 Layer-2 Bridging Guide — spanning-tree port-type
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/l2_bridging_4100i-6000-6100-5420-6200/Content/Chp_stp/mstp_cmds/spa-tre-por-typ.htm
+  - title: AOS-CX 10.15 Layer-2 Bridging Guide — spanning-tree
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/l2_bridging_4100i-6000-6100-5420-6200/Content/Chp_stp/mstp_cmds/spa-tre.htm
+  - title: AOS-CX 10.15 Layer-2 Bridging Guide — MSTP use case, BPDU protection
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/l2_bridging_4100i-6000-6100-5420-6200/Content/Chp_stp/use-caseMSTP_BPDU-prot.htm
+  - title: AOS-CX 10.15 Layer-2 Bridging Guide — show spanning-tree summary port
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/l2_bridging_4100i-6000-6100-5420-6200/Content/Chp_stp/rpvst_cmds/sho-spa-tre-sum-por-rpv-10.htm
+  - title: AOS-CX 10.15 Layer-2 Bridging Guide — MSTP FAQ (modo por defecto)
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/l2_bridging_4100i-6000-6100-5420-6200/Content/Chp_stp/FAQ_MSTP.htm
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: AOS-CX 10.15
+  notes: >-
+    Los comandos de configuración y de consulta están en la guía de Layer 2 del 6100
+    para la 10.15. La documentación no dice si Spanning Tree viene activo de fábrica
+    en el 6100 ni con qué comando se reactiva un puerto en estado Bpdu-Error: el
+    shutdown y no shutdown del rollback es la forma habitual, no confirmada. No se
+    incluye la reactivación automática (spanning-tree bpdu-guard timeout) porque la
+    página oficial la declara global pero su ejemplo la usa dentro del puerto. La
+    página de show spanning-tree summary port es la de RPVST; en MSTP la salida puede
+    variar. Falta probar este runbook en un 6100.

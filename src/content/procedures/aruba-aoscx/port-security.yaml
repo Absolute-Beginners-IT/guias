@@ -1,0 +1,203 @@
+platform: aruba-aoscx
+task: port-security
+summary: >-
+  Limita cuántas direcciones MAC puede aprender un puerto de acceso de un Aruba CX
+  6100 con port security, y decide qué hace el switch cuando aparece una de más:
+  avisar o apagar el puerto.
+risk:
+  level: medium
+  reason: >-
+    Un límite demasiado bajo deja sin red a equipos legítimos, como el ordenador
+    conectado detrás de un teléfono IP. Con la acción shutdown, el puerto queda
+    apagado hasta que se recupera solo o lo reactivas. Aplicado a un enlace con otro
+    switch o un punto de acceso, corta a todos los equipos de detrás.
+params:
+  - id: interfaceId
+    label: Puerto de acceso
+    type: text
+    example: 1/1/5
+    pattern: '^\d+/\d+/\d+$'
+    patternHint: Formato miembro/slot/puerto, por ejemplo 1/1/5.
+    help: Solo puertos de acceso; nunca un enlace a otro switch o a un punto de acceso.
+  - id: clientLimit
+    label: Máximo de direcciones MAC
+    type: number
+    min: 1
+    max: 32
+    example: '2'
+    help: >-
+      Cuenta el teléfono IP, el ordenador de detrás y las máquinas virtuales. En el 6100
+      el máximo es 32. El switch admite 0, que bloquea el puerto entero; para eso es
+      más claro apagar el puerto, así que esta guía empieza en 1.
+  - id: violationAction
+    label: Acción ante una MAC de más
+    type: choice
+    options:
+      - notify
+      - shutdown
+    example: notify
+    help: notify solo registra el aviso y envía un trap SNMP; shutdown apaga el puerto.
+  - id: recoverySeconds
+    label: Segundos hasta reactivar el puerto (solo con shutdown)
+    type: number
+    min: 10
+    max: 600
+    example: '60'
+    help: Tiempo tras el que el switch reactiva solo un puerto apagado por una violación.
+  - id: checkpointName
+    label: Nombre del checkpoint de respaldo
+    type: text
+    example: antes-port-sec-1-1-5
+    pattern: '^(?!CPC)[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres; letras, números, guion y guion bajo; no puede empezar por CPC.
+preflight:
+  - text: >-
+      Confirma que el puerto es de acceso, con una sola VLAN, y que no es el enlace
+      hacia otro switch ni el puerto por el que estás conectado.
+    command: show interface {{interfaceId}}
+  - text: >-
+      Mira cuántas MAC aprende hoy el puerto. Si son más que el límite que piensas
+      poner, alguien se quedaría sin red.
+    command: show mac-address-table interface {{interfaceId}}
+  - text: Guarda un checkpoint con la configuración actual.
+    command: copy running-config checkpoint {{checkpointName}}
+steps:
+  - title: Entrar en modo configuración
+    commands:
+      - config
+    explanation: Pasa a configuración global. El prompt cambia a switch(config)#.
+  - title: Activar port security en el switch
+    commands:
+      - port-access port-security enable
+    explanation: >-
+      Habilita la función a nivel global. Por sí sola no limita ningún puerto: cada
+      puerto se activa aparte.
+  - title: Activar port security en el puerto y fijar el límite
+    commands:
+      - interface {{interfaceId}}
+      - port-access port-security enable
+      - client-limit {{clientLimit}}
+      - exit
+    explanation: >-
+      Activa port security en el puerto y entra en su contexto, donde se fija el
+      límite. Desde ahora el puerto aprende como máximo {{clientLimit}} direcciones
+      MAC; el resto de equipos no tiene red por ese puerto.
+    breakdown:
+      - token: port-access port-security enable
+        meaning: Activa port security en este puerto. El prompt pasa a switch(config-if-port-security)#.
+      - token: client-limit {{clientLimit}}
+        meaning: >-
+          Máximo de equipos (direcciones MAC) permitidos. Por defecto es 1; en el
+          6100 admite de 0 a 32, y 0 bloquea el puerto por completo.
+      - token: exit
+        meaning: Vuelve al contexto del puerto, switch(config-if)#.
+    warning: >-
+      Si el prompt no cambia a config-if-port-security, escribe port-access
+      port-security para entrar en ese contexto antes de client-limit.
+  - title: Definir la acción ante una violación
+    commands:
+      - port-access security violation action {{violationAction}}
+    explanation: >-
+      Indica qué hace el switch cuando aparece una MAC de más en el puerto.
+    breakdown:
+      - token: notify
+        meaning: >-
+          Valor por defecto. Registra el evento en el log y en syslog y envía un trap
+          SNMP; el equipo de más no tiene red, pero el puerto sigue funcionando para los
+          demás.
+      - token: shutdown
+        meaning: Apaga el puerto entero, también para los equipos permitidos.
+  - title: 'Solo con shutdown: reactivar el puerto automáticamente'
+    commands:
+      - port-access security violation action shutdown auto-recovery enable
+      - port-access security violation action shutdown recovery-timer {{recoverySeconds}}
+    explanation: >-
+      Con la acción shutdown, el puerto vuelve a activarse solo pasados
+      {{recoverySeconds}} segundos. Si elegiste notify, salta este paso.
+    breakdown:
+      - token: auto-recovery enable
+        meaning: Reactiva el puerto al vencer el temporizador. Por defecto está desactivado y el puerto queda apagado.
+      - token: recovery-timer {{recoverySeconds}}
+        meaning: Segundos de espera antes de reactivarlo, de 10 a 600. Por defecto, 10.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve al modo Manager.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: Copia la configuración en ejecución a la de arranque.
+verification:
+  - command: show port-access port-security interface {{interfaceId}} client-status
+    expect: Las MAC de los equipos conectados, como mucho {{clientLimit}}, de tipo dynamic.
+  - command: show port-access port-security violation client-limit-exceeded interface {{interfaceId}}
+    expect: Violation No mientras no aparezcan más equipos que el límite.
+  - command: show running-config interface {{interfaceId}}
+    expect: >-
+      El bloque del puerto incluye port-access port-security con client-limit
+      {{clientLimit}} y la acción {{violationAction}}.
+rollback:
+  summary: >-
+    Desactiva port security en el puerto, o vuelve al checkpoint. Si el puerto se
+    apagó por una violación, quita el equipo de más y reactívalo.
+  steps:
+    - title: Desactivar port security en el puerto
+      commands:
+        - config
+        - interface {{interfaceId}}
+        - port-access port-security disable
+        - no port-access security violation action
+        - end
+        - write memory
+      explanation: >-
+        El puerto deja de limitar MAC y la acción vuelve a la de por defecto, notify.
+        La función global sigue habilitada, sin efecto en ningún puerto.
+    - title: Reactivar un puerto apagado por una violación
+      commands:
+        - config
+        - interface {{interfaceId}}
+        - shutdown
+        - no shutdown
+        - end
+      explanation: >-
+        Apagar el puerto a mano reinicia su estado de violación. Antes, desconecta el
+        equipo de más; si sigue conectado, el puerto se vuelve a apagar.
+    - title: 'Alternativa: volver al checkpoint'
+      commands:
+        - checkpoint rollback {{checkpointName}}
+        - write memory
+      explanation: Vuelve al estado guardado antes de empezar y lo deja también en la configuración de arranque.
+  lockoutRecovery: >-
+    Si el puerto limitado era el que usabas para gestionar el switch, entra desde
+    otro puerto o por la consola y desactiva port security en él con port-access
+    port-security disable.
+sources:
+  - title: AOS-CX 10.15 Security Guide (4100i, 6000, 6100) — port-access port-security
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/security_4100i-6000-6100/Content/Chp_Port_sec/Port_sec_cmds/por-acc-por-sec-fl-10.htm
+  - title: AOS-CX 10.15 Security Guide — port-access port-security client-limit
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/security_4100i-6000-6100/Content/Chp_Port_sec/Port_sec_cmds/por-acc-por-sec-cli-lim-fl-10.htm
+  - title: AOS-CX 10.15 Security Guide — port-access security violation action
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/security_4100i-6000-6100/Content/Chp_Port_acc/Viol_infra_port_acc_sec_cmds/por-acc-sec-vio-act-fl-10.htm
+  - title: AOS-CX 10.15 Security Guide — violation action shutdown auto-recovery
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/security_4100i-6000-6100/Content/Chp_Port_acc/Viol_infra_port_acc_sec_cmds/por-acc-sec-vio-act-shu-aut-rec-fl-10.htm
+  - title: AOS-CX 10.15 Security Guide — violation action shutdown recovery-timer
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/security_4100i-6000-6100/Content/Chp_Port_acc/Viol_infra_port_acc_sec_cmds/por-acc-sec-vio-act-shu-rec-tim-fl-10.htm
+  - title: AOS-CX 10.15 Security Guide — Port access security violation
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/security_4100i-6000-6100/Content/Chp_Port_acc/abo-sec-vio.htm
+  - title: AOS-CX 10.15 Security Guide — show port-access port-security interface client-status
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/security_4100i-6000-6100/Content/Chp_Port_sec/Port_sec_cmds/sho-por-acc-por-sec-int-cli-sta-fl-10.htm
+  - title: AOS-CX 10.15 Security Guide — show port-access port-security violation client-limit-exceeded
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/security_4100i-6000-6100/Content/Chp_Port_acc/Viol_infra_port_acc_sec_cmds/sho-por-acc-por-sec-vio-cli-lim-exc-int-fl-10.htm
+status:
+  level: unverified
+  reviewed: '2026-10-14'
+  firmware: AOS-CX 10.15
+  notes: >-
+    Los comandos de port security, client-limit, acción de violación, recuperación y
+    las dos consultas de port-access están en la guía de seguridad del 6100 para la
+    10.15. No se consultaron en la documentación show mac-address-table interface ni
+    show running-config interface. El ejemplo oficial muestra que port-access
+    port-security enable en el puerto entra en el contexto config-if-port-security,
+    pero la página del comando no lo dice; si no entra, port-access port-security
+    abre ese contexto. Que shutdown y no shutdown reinicien el estado de violación sí
+    está documentado. No se usa sticky learning. Falta probar este runbook en un 6100.

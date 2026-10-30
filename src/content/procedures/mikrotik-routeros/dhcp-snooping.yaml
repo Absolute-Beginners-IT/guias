@@ -1,0 +1,151 @@
+platform: mikrotik-routeros
+task: dhcp-snooping
+summary: >-
+  Marca como confiable el puerto por el que llega el servidor DHCP legítimo y activa
+  DHCP snooping en el bridge de un MikroTik con RouterOS 7. En RouterOS el snooping
+  se activa para todo el bridge, no para una sola VLAN: afecta a todas las VLAN que
+  pasan por él. En el CRS317, con chip Marvell Prestera, funciona por hardware.
+risk:
+  level: high
+  reason: >-
+    Se aplica a todas las VLAN del bridge a la vez. Si falta como confiable algún
+    puerto por el que llega un servidor DHCP, los equipos de esa VLAN se quedan sin
+    dirección al renovarla, y el error puede tardar horas en notarse.
+params:
+  - id: bridgeName
+    label: Nombre del bridge
+    type: text
+    example: bridge
+    pattern: '^[A-Za-z0-9_.-]{1,32}$'
+    patternHint: Nombre tal como aparece en /interface bridge print, sin espacios.
+  - id: trustedPort
+    label: Puerto hacia el servidor DHCP o el switch troncal
+    type: text
+    example: sfp-sfpplus1
+    pattern: '^[A-Za-z0-9_.+-]{1,32}$'
+    patternHint: Nombre del puerto tal como aparece en /interface bridge port print, sin espacios.
+    help: >-
+      El puerto por el que llegan las respuestas del servidor DHCP legítimo. Si hay
+      varios (otro enlace troncal, un bond), repite el paso con cada uno.
+preflight:
+  - text: >-
+      Mira el bridge. dhcp-snooping tiene que estar en no. Hasta RouterOS 7.22,
+      comprueba también que add-dhcp-option82 está en no; desde 7.23 esa propiedad ya
+      no existe y la opción 82 se configura con dhcp-agent-circuit-id y
+      dhcp-agent-remote-id, que esta guía no toca.
+    command: /interface bridge print detail
+  - text: >-
+      Mira los puertos del bridge y apunta todos los que llevan a un servidor DHCP
+      legítimo, directamente o a través de otro switch, en cualquier VLAN. Todos
+      tienen que quedar como confiables.
+    command: /interface bridge port print
+  - text: >-
+      Ten a mano un equipo de prueba en una de las VLAN para forzar la renovación
+      de su dirección después del cambio.
+  - text: Si el switch tiene su IP de gestión por DHCP, recuerda que también depende de que el puerto confiable esté bien.
+steps:
+  - title: Activar Safe Mode
+    manual: true
+    explanation: >-
+      Pulsa Ctrl+X (o F4). El prompt pasa a mostrar SAFE. Si tu sesión se corta, los
+      cambios se deshacen solos al vencer el tiempo de espera de la conexión.
+  - title: Marcar como confiable el puerto hacia el servidor DHCP
+    commands:
+      - /interface bridge port set [find where interface={{trustedPort}}] trusted=yes
+    explanation: >-
+      Hace que por {{trustedPort}} se acepten las respuestas de servidor DHCP. Se
+      hace antes de activar el snooping para que el servidor legítimo no quede
+      bloqueado ni un momento. Repite el comando con cada enlace troncal o puerto
+      hacia un servidor DHCP que apuntaste antes.
+    breakdown:
+      - token: '[find where interface={{trustedPort}}]'
+        meaning: Selecciona la entrada del bridge que corresponde a ese puerto.
+      - token: trusted=yes
+        meaning: >-
+          Puerto confiable: deja pasar los mensajes DHCP de servidor y los que ya
+          traen la opción 82. Solo tiene efecto con dhcp-snooping activo.
+  - title: Activar DHCP snooping en el bridge
+    commands:
+      - /interface bridge set [find where name={{bridgeName}}] dhcp-snooping=yes
+    explanation: >-
+      Desde ahora, las respuestas de servidor DHCP que lleguen por un puerto no
+      confiable se descartan, en todas las VLAN del bridge.
+    warning: >-
+      Activar DHCP snooping apaga el fast-path del bridge. En el CRS317 el tráfico
+      entre puertos lo conmuta el chip y no se ve afectado; sí afecta al tráfico que
+      pasa por la CPU.
+    breakdown:
+      - token: /interface bridge set
+        meaning: Modifica las propiedades del bridge.
+      - token: '[find where name={{bridgeName}}]'
+        meaning: Selecciona el bridge por su nombre.
+      - token: dhcp-snooping=yes
+        meaning: Activa DHCP snooping en todo el bridge.
+  - title: Probar la renovación en un equipo
+    manual: true
+    explanation: >-
+      En el equipo de prueba, renueva la dirección (en Windows, ipconfig /release y
+      después ipconfig /renew) y confirma que recibe una IP del servidor correcto.
+  - title: Salir de Safe Mode conservando el cambio
+    manual: true
+    explanation: >-
+      Pulsa Ctrl+X de nuevo. El cambio queda guardado. Si algo no está bien, pulsa
+      Ctrl+D en su lugar para salir deshaciendo lo hecho.
+verification:
+  - command: /interface bridge print detail
+    expect: El bridge {{bridgeName}} muestra dhcp-snooping=yes.
+  - command: /interface bridge port print detail
+    expect: >-
+      {{trustedPort}} y los demás puertos hacia servidores DHCP muestran
+      trusted=yes; los puertos de usuario, trusted=no.
+  - command: /interface bridge host print where dhcpv4-status
+    expect: >-
+      En las versiones que tienen tabla de asignaciones DHCP, aparece el equipo de
+      prueba con la IP que acaba de recibir y su puerto.
+rollback:
+  summary: >-
+    Dentro de Safe Mode, Ctrl+D deshace todo. Fuera de Safe Mode se apaga DHCP
+    snooping en el bridge; con eso los puertos confiables dejan de tener efecto.
+  steps:
+    - title: Si sigues en Safe Mode
+      manual: true
+      explanation: Pulsa Ctrl+D. Sale de Safe Mode deshaciendo los cambios hechos en él.
+    - title: Si ya saliste de Safe Mode
+      commands:
+        - /interface bridge set [find where name={{bridgeName}}] dhcp-snooping=no
+      explanation: >-
+        Apaga DHCP snooping. Los equipos vuelven a recibir dirección en la siguiente
+        renovación; fuérzala en los que se quedaron sin red.
+    - title: 'Opcional: quitar la marca de confiable'
+      commands:
+        - /interface bridge port set [find where interface={{trustedPort}}] trusted=no
+      explanation: Devuelve el puerto al valor de fábrica. Sin snooping activo no cambia nada.
+  lockoutRecovery: >-
+    Si la sesión se corta con Safe Mode activo, espera unos 9 minutos: los cambios
+    se deshacen solos. Si el switch pierde su IP de gestión por DHCP, entra por
+    WinBox por MAC desde la misma red o por la consola serie y apaga el snooping.
+sources:
+  - title: RouterOS — Bridging and Switching (dhcp-snooping, trusted, opción 82)
+    url: https://help.mikrotik.com/docs/display/ROS/Bridging+and+Switching
+  - title: RouterOS Manual 7.25 — Bridging and Switching (ejemplo de DHCP snooping y tabla de asignaciones)
+    url: https://manual.mikrotik.com/docs/7.25/bridging-and-switching/
+  - title: RouterOS Manual 7.25 — Marvell Prestera switch chip features (DHCP snooping por hardware)
+    url: https://manual.mikrotik.com/docs/7.25/bridging-and-switching/marvell-prestera-switch-chip-features/
+  - title: RouterOS CLI reference (7.26) — /interface bridge
+    url: https://manual.mikrotik.com/docs/cli-reference/interface/bridge/
+  - title: RouterOS CLI reference (7.26) — /interface bridge port
+    url: https://manual.mikrotik.com/docs/cli-reference/interface/bridge/port/
+status:
+  level: unverified
+  reviewed: '2026-10-14'
+  firmware: RouterOS 7 (referencia de la CLI 7.26)
+  notes: >-
+    Marcada sin verificar. Están contrastados con la documentación oficial
+    dhcp-snooping en el bridge con set [find where name=...], trusted en los
+    puertos, que el snooping apaga el fast-path, que la opción 82 es opcional, que
+    add-dhcp-option82 desaparece en 7.23 y que los chips Marvell Prestera, como el
+    del CRS317, hacen DHCP snooping y opción 82 por hardware. No se confirmaron: que
+    en 7.23 o posterior la opción 82 queda sin añadir con los valores de fábrica,
+    print detail en estas tablas, en qué versión aparece la tabla de asignaciones
+    (host print where dhcpv4-status) y el rollback con trusted=no. Falta probar la
+    guía en un equipo real.

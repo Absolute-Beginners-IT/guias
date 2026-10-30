@@ -1,0 +1,22 @@
+id: firmware-upgrade
+title: Actualizar el firmware
+group: setup-access
+order: 6
+summary: Instala una versión nueva del sistema operativo del switch conservando la anterior como vuelta atrás.
+explanation: >-
+  El firmware es el sistema operativo del switch. Se actualiza para corregir fallos
+  de seguridad y errores, o para tener funciones nuevas. Los switches de gama
+  profesional guardan dos imágenes: la que está en uso y otra de reserva. Lo seguro
+  es instalar la versión nueva en la de reserva, arrancar con ella y conservar la
+  anterior intacta para poder volver. La actualización solo surte efecto al
+  reiniciar.
+risks:
+  - El switch se reinicia y todo el tráfico que pasa por él se corta durante varios minutos.
+  - Un corte de luz o una imagen dañada durante la escritura puede dejar el equipo sin arrancar.
+  - Una versión nueva puede cambiar comportamientos o convertir la configuración a un formato que la versión anterior no entiende.
+  - Saltar varias versiones de golpe puede no estar soportado; a veces hay que pasar por una versión intermedia.
+prerequisites:
+  - Leer las notas de la versión nueva y comprobar que la ruta de actualización desde la actual está soportada.
+  - Descargar la imagen desde la web oficial del fabricante y comprobar su integridad.
+  - Tener una copia de la configuración fuera del switch.
+  - Hacerlo en una ventana de mantenimiento, con acceso por consola y alimentación estable.

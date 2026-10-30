@@ -1,0 +1,104 @@
+platform: cisco-c1300
+task: vlan-create
+summary: >-
+  Crea una VLAN con nombre en un Cisco Catalyst 1300 y guarda el cambio. No toca
+  ningún puerto.
+risk:
+  level: low
+  reason: >-
+    Dar de alta una VLAN no afecta a los puertos ni al tráfico existente. El único
+    error con consecuencias es usar por descuido el ID de una VLAN que ya está en uso.
+params:
+  - id: vlanId
+    label: ID de la VLAN
+    type: number
+    min: 2
+    max: 4094
+    example: '20'
+    help: Número de 2 a 4094. La VLAN 1 ya existe de fábrica.
+  - id: vlanName
+    label: Nombre de la VLAN
+    type: text
+    example: VOZ
+    pattern: '^[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres; solo letras, números, guion y guion bajo, sin espacios.
+    help: Tiene que ser único en el switch.
+preflight:
+  - text: >-
+      Comprueba que el ID no esté ya en uso. Si aparece en la lista, no sigas:
+      estarías modificando una VLAN existente.
+    command: show vlan
+  - text: >-
+      Este switch no tiene checkpoints. Tu punto de retorno es la configuración de
+      arranque: no ejecutes write memory hasta haber verificado el cambio.
+steps:
+  - title: Entrar en modo configuración
+    commands:
+      - configure terminal
+    explanation: >-
+      Pasa de Privileged EXEC a configuración global. El prompt termina en
+      (config)#.
+  - title: Entrar en la base de datos de VLAN
+    commands:
+      - vlan database
+    explanation: Entra en el modo donde se dan de alta las VLAN. El prompt termina en (config-vlan)#.
+  - title: Crear la VLAN con su nombre
+    commands:
+      - vlan {{vlanId}} name {{vlanName}}
+    explanation: Crea la VLAN {{vlanId}} si no existe y le asigna el nombre {{vlanName}} en el mismo comando.
+    breakdown:
+      - token: vlan {{vlanId}}
+        meaning: Identificador de la VLAN, de 2 a 4094. Es el número que viaja en la etiqueta 802.1Q.
+      - token: name {{vlanName}}
+        meaning: Nombre de la VLAN, de 1 a 32 caracteres y único en el switch.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve a Privileged EXEC, desde donde se hacen las consultas y se guarda.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: >-
+      Copia la configuración en ejecución a la de arranque. El switch pregunta si
+      quieres sobrescribir startup-config; al aceptar muestra Copy succeeded.
+    warning: Verifica primero (sección siguiente) y guarda después.
+verification:
+  - command: show vlan tag {{vlanId}}
+    expect: >-
+      Una fila con el ID {{vlanId}} y el nombre {{vlanName}}, creada como estática
+      (S) y todavía sin puertos.
+rollback:
+  summary: >-
+    Como la VLAN es nueva y no tiene puertos, basta con borrarla.
+  steps:
+    - title: Borrar la VLAN creada
+      commands:
+        - configure terminal
+        - no vlan {{vlanId}}
+        - end
+      explanation: >-
+        Elimina la VLAN. Antes de borrarla confirma con show vlan tag {{vlanId}} que
+        no tiene puertos asignados.
+    - title: Si ya habías guardado con write memory
+      commands:
+        - write memory
+      explanation: >-
+        Después de borrar la VLAN, guarda de nuevo para que la configuración de
+        arranque también quede sin el cambio.
+  lockoutRecovery: >-
+    Crear una VLAN no corta el acceso de gestión. Si perdieras la conexión por otro
+    motivo antes de haber ejecutado write memory, un reinicio del switch arranca con
+    la configuración de arranque anterior.
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — VLAN Commands
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/vlan-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — File System Commands (write memory)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/file-system-commands.html
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: >-
+    Sintaxis contrastada con la guía oficial de la CLI. La guía no detalla qué
+    caracteres admite el nombre de la VLAN; esta guía los limita a un conjunto
+    seguro. Falta probarla en un C1300 real.

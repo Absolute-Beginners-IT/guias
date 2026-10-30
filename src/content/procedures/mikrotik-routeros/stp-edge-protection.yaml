@@ -1,0 +1,135 @@
+platform: mikrotik-routeros
+task: stp-edge-protection
+summary: >-
+  Comprueba que el bridge de un MikroTik con RouterOS 7 tiene Spanning Tree activo
+  (RSTP o MSTP) y marca un puerto de acceso como puerto de borde con BPDU Guard. En
+  el CRS317, con chip Marvell Prestera, Spanning Tree, los puertos de borde y BPDU
+  Guard funcionan en el propio chip, sin perder la aceleración por hardware.
+risk:
+  level: medium
+  reason: >-
+    Solo toca un puerto, pero si en realidad va a otro switch, ese enlace pierde la
+    protección contra bucles o queda apagado por BPDU Guard. RouterOS guarda el
+    cambio en el momento, sin paso de confirmación.
+params:
+  - id: interfaceName
+    label: Puerto de acceso que pasa a ser de borde
+    type: text
+    example: sfp-sfpplus5
+    pattern: '^[A-Za-z0-9_.+-]{1,32}$'
+    patternHint: Nombre del puerto tal como aparece en /interface bridge port print, sin espacios.
+    help: Un puerto con un solo equipo final detrás. Nunca un enlace a otro switch.
+preflight:
+  - text: >-
+      Mira el bridge y su protocol-mode: tiene que ser rstp (el de fábrica) o mstp.
+      Si es none, Spanning Tree está apagado: detente y actívalo en una ventana de
+      mantenimiento, porque recalcula la topología y corta el tráfico unos segundos.
+    command: /interface bridge print
+  - text: >-
+      Confirma el nombre exacto del puerto, que forma parte del bridge y que tiene
+      la marca H (aceleración por hardware).
+    command: /interface bridge port print
+  - text: >-
+      Mira el estado de Spanning Tree en ese puerto. Su role no debe ser root-port
+      ni alternate-port, y bpdu-tx-rx no debe mostrar BPDU recibidas (el segundo
+      número): si las hay, detrás hay un switch y no es un puerto de acceso. Sal
+      con Ctrl+C.
+    command: /interface bridge port monitor [find interface={{interfaceName}}]
+  - text: Confirma que no estás conectado a la gestión a través de ese puerto.
+steps:
+  - title: Activar Safe Mode
+    manual: true
+    explanation: >-
+      Pulsa Ctrl+X (o F4). El prompt pasa a mostrar SAFE. Si tu sesión se corta, los
+      cambios se deshacen solos al vencer el tiempo de espera de la conexión.
+  - title: Marcar el puerto como de borde con BPDU Guard
+    commands:
+      - /interface bridge port set [find where interface={{interfaceName}}] edge=yes bpdu-guard=yes
+    explanation: >-
+      El puerto {{interfaceName}} pasa directamente a reenviar tráfico al conectar un
+      equipo, sin esperar a Spanning Tree, y se apaga si por él llega una BPDU, es
+      decir, si alguien conecta un switch.
+    warning: >-
+      Si por este puerto llegan BPDU, BPDU Guard lo apaga en el momento y queda así
+      hasta que alguien lo reactive a mano.
+    breakdown:
+      - token: /interface bridge port set
+        meaning: Modifica un puerto que ya forma parte del bridge.
+      - token: '[find where interface={{interfaceName}}]'
+        meaning: Selecciona la entrada del bridge que corresponde a ese puerto.
+      - token: edge=yes
+        meaning: >-
+          Puerto de borde fijo, sin detección: pasa directamente a reenviar. El valor
+          de fábrica es auto, que se comporta como no-discover (puede convertirse en
+          borde si no recibe BPDU).
+      - token: bpdu-guard=yes
+        meaning: Pone el puerto en rol disabled si recibe una BPDU.
+  - title: Verificar antes de salir de Safe Mode
+    manual: true
+    explanation: >-
+      Haz las comprobaciones de la sección Verificación sin salir de Safe Mode y
+      confirma que el equipo conectado a {{interfaceName}} sigue teniendo red.
+  - title: Salir de Safe Mode conservando el cambio
+    manual: true
+    explanation: >-
+      Pulsa Ctrl+X de nuevo. El cambio queda guardado. Si algo no está bien, pulsa
+      Ctrl+D en su lugar para salir deshaciendo lo hecho.
+verification:
+  - command: /interface bridge port monitor [find interface={{interfaceName}}]
+    expect: >-
+      edge-port muestra yes y role es designated-port. Si role es disabled, BPDU
+      Guard apagó el puerto: mira la sección Volver atrás. Sal con Ctrl+C.
+  - command: /interface bridge port print
+    expect: >-
+      {{interfaceName}} conserva la marca H y no aparece con la marca I (inactivo),
+      que es la que deja BPDU Guard cuando apaga un puerto.
+rollback:
+  summary: >-
+    Dentro de Safe Mode, Ctrl+D deshace todo. Fuera de Safe Mode se devuelven edge y
+    bpdu-guard a los valores de fábrica. Si BPDU Guard apagó el puerto, se reactiva
+    desactivándolo y activándolo, después de quitar el switch que lo provocó.
+  steps:
+    - title: Si sigues en Safe Mode
+      manual: true
+      explanation: Pulsa Ctrl+D. Sale de Safe Mode deshaciendo los cambios hechos en él.
+    - title: Si ya saliste de Safe Mode
+      commands:
+        - /interface bridge port set [find where interface={{interfaceName}}] edge=auto bpdu-guard=no
+      explanation: >-
+        Devuelve el puerto a los valores de fábrica: detección automática de borde y
+        sin BPDU Guard.
+    - title: Reactivar un puerto apagado por BPDU Guard
+      commands:
+        - /interface bridge port disable [find where interface={{interfaceName}}]
+        - /interface bridge port enable [find where interface={{interfaceName}}]
+      explanation: >-
+        BPDU Guard deja el puerto apagado hasta que se desactiva y se vuelve a activar
+        a mano; en el registro aparece "bpdu-guard disabling ... due to received bpdu".
+        Antes, desconecta el switch o el equipo que envió la BPDU: si sigue ahí, el
+        puerto se vuelve a apagar enseguida.
+  lockoutRecovery: >-
+    Si la sesión se corta con Safe Mode activo, espera unos 9 minutos: los cambios
+    se deshacen solos. Si BPDU Guard apagó el puerto por el que gestionabas el
+    switch, entra por otro puerto, por WinBox o por la consola serie y reactívalo.
+sources:
+  - title: RouterOS — Bridging and Switching (edge, bpdu-guard, protocol-mode)
+    url: https://help.mikrotik.com/docs/display/ROS/Bridging+and+Switching
+  - title: RouterOS Manual 7.25 — Spanning Tree Protocol (puertos de borde y monitor)
+    url: https://manual.mikrotik.com/docs/7.25/bridging-and-switching/user-guides/spanning-tree-protocol/
+  - title: RouterOS Manual 7.25 — Marvell Prestera switch chip features (STP y BPDU Guard en el chip)
+    url: https://manual.mikrotik.com/docs/7.25/bridging-and-switching/marvell-prestera-switch-chip-features/
+  - title: RouterOS CLI reference (7.26) — /interface bridge port
+    url: https://manual.mikrotik.com/docs/cli-reference/interface/bridge/port/
+status:
+  level: unverified
+  reviewed: '2026-10-14'
+  firmware: RouterOS 7 (referencia de la CLI 7.26)
+  notes: >-
+    Marcada sin verificar. Están contrastados con la documentación oficial los
+    valores de edge (auto, yes, no, yes-discover, no-discover), bpdu-guard, los
+    valores de protocol-mode, la forma monitor [find interface=...], los campos
+    edge-port y role, el mensaje de registro de BPDU Guard y que el chip Prestera
+    del CRS317 hace STP y BPDU Guard por hardware. La documentación dice que el
+    puerto apagado hay que desactivarlo y activarlo a mano, pero no muestra los
+    comandos disable y enable sobre /interface bridge port. Falta probar la guía en
+    un equipo real.

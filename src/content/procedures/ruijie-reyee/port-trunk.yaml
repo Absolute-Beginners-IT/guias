@@ -1,0 +1,77 @@
+platform: ruijie-reyee
+task: port-trunk
+summary: >-
+  Configura un puerto de un Ruijie NBS3200 como trunk, con su VLAN nativa y su rango
+  de VLAN permitidas, desde la interfaz web.
+risk:
+  level: high
+  reason: >-
+    Un trunk suele ser un enlace entre switches: un error corta todas las VLAN que
+    pasan por él, incluida la de gestión.
+params:
+  - id: port
+    label: Puerto
+    type: text
+    example: Gi48
+    pattern: '^[A-Za-z]{2}\d{1,2}$'
+    patternHint: Nombre del puerto tal como aparece en el panel.
+  - id: nativeVlanId
+    label: VLAN nativa
+    type: vlan-id
+    example: '1'
+    help: Tiene que ser la misma en el otro extremo del enlace.
+  - id: allowedVlans
+    label: VLAN permitidas
+    type: text
+    example: 1,20,30-35
+    pattern: '^\d{1,4}(-\d{1,4})?(,\d{1,4}(-\d{1,4})?)*$'
+    patternHint: IDs separados por comas y rangos con guion, sin espacios.
+    help: Incluye la VLAN nativa y la de gestión si tienen que pasar por este enlace.
+preflight:
+  - text: Haz una copia de la configuración con la guía Guardar una copia de la configuración.
+  - text: >-
+      En Local Device > VLAN > Port List, anota el modo, la VLAN nativa y las VLAN
+      permitidas actuales de {{port}}; las vas a necesitar para volver atrás.
+  - text: Confirma con quien administra el otro extremo la VLAN nativa y las VLAN permitidas.
+steps:
+  - title: Abrir la lista de puertos
+    manual: true
+    explanation: Ve a Local Device > VLAN > Port List.
+  - title: Configurar el puerto como trunk
+    manual: true
+    explanation: >-
+      Pulsa Edit en la fila de {{port}}, elige el modo Trunk port, selecciona la
+      Native VLAN {{nativeVlanId}}, escribe el rango de VLAN permitidas
+      {{allowedVlans}} y pulsa OK.
+    warning: >-
+      Un trunk pertenece de fábrica a todas las VLAN; el rango que escribas limita
+      cuáles pasan. Si falta la VLAN de gestión, pierdes el acceso por este enlace.
+verification:
+  - expect: >-
+      En Port List, {{port}} aparece en modo Trunk, con VLAN nativa {{nativeVlanId}}
+      y VLAN permitidas {{allowedVlans}}.
+  - expect: Los equipos de cada VLAN se ven a través del enlace.
+rollback:
+  summary: Devuelve el puerto al modo y las VLAN que anotaste antes de empezar.
+  steps:
+    - title: Volver a la configuración anterior del puerto
+      manual: true
+      explanation: En Port List, pulsa Edit en {{port}}, pon los valores que anotaste y pulsa OK.
+    - title: 'Alternativa: importar la copia'
+      manual: true
+      explanation: Importa la copia hecha antes de empezar con la guía Restaurar una configuración guardada; el switch se reinicia.
+  lockoutRecovery: >-
+    Si pierdes el acceso, conéctate a un puerto de la VLAN de gestión de este mismo
+    switch y deshaz el cambio. Si no hay forma, el botón Reset mantenido más de 5
+    segundos devuelve el switch a fábrica.
+sources:
+  - title: Ruijie Reyee NBS3200 V2 — ReyeeOS 2.341 Configuration Guide, apartado Configuring Port VLAN
+    url: https://reyee.ruijie.com/en-global/support/documents/slide_rg-nbs3200-24gt4xs-p-v2-nbs3200-48gt4xs-p-v2-switches-implementation-cookbook/
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: ReyeeOS 2.341
+  notes: >-
+    Pasos contrastados con la guía oficial, incluido que un trunk pertenece de
+    fábrica a todas las VLAN. El nombre de puerto del ejemplo es orientativo. Falta
+    probarla en un NBS3200 real.

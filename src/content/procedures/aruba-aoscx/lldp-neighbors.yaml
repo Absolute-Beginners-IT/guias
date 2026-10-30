@@ -1,0 +1,70 @@
+platform: aruba-aoscx
+task: lldp-neighbors
+summary: >-
+  Muestra qué equipo hay al otro lado de cada puerto de un Aruba CX 6100 y, si
+  hiciera falta, vuelve a activar LLDP.
+risk:
+  level: low
+  reason: Consultar vecinos no cambia nada; LLDP viene activado de fábrica.
+params:
+  - id: interfaceId
+    label: Puerto a consultar en detalle
+    type: text
+    example: 1/1/49
+    pattern: '^\d+/\d+/\d+$'
+    patternHint: Formato miembro/slot/puerto, por ejemplo 1/1/49.
+preflight:
+  - text: >-
+      LLDP viene activado de fábrica en todo el switch y en todos los puertos. El
+      último paso solo hace falta si alguien lo desactivó.
+steps:
+  - title: Ver todos los vecinos
+    commands:
+      - show lldp neighbor-info
+    explanation: >-
+      Lista, por cada puerto local, el equipo vecino que se anuncia: su
+      identificador, su puerto y su nombre (SYS-NAME).
+  - title: Ver el detalle de un puerto
+    commands:
+      - show lldp neighbor-info {{interfaceId}}
+    explanation: >-
+      Muestra todo lo que anuncia el vecino de {{interfaceId}}: nombre, descripción
+      con modelo y versión, dirección de gestión y capacidades.
+  - title: 'Si la lista sale vacía: activar LLDP'
+    commands:
+      - config
+      - lldp
+      - end
+    explanation: >-
+      Activa LLDP en todo el switch. Si ya estaba activo no cambia nada. Cada puerto
+      tiene además lldp transmit y lldp receive, activados de fábrica.
+verification:
+  - command: show lldp neighbor-info
+    expect: >-
+      Aparecen los switches, teléfonos y puntos de acceso conectados, cada uno en su
+      puerto. Un puerto con un PC normal no suele mostrar vecino.
+rollback:
+  summary: >-
+    Consultar no requiere vuelta atrás. Si activaste LLDP y antes estaba desactivado
+    a propósito, vuelve a desactivarlo.
+  steps:
+    - title: Desactivar LLDP de nuevo
+      commands:
+        - config
+        - no lldp
+        - end
+      explanation: Desactiva LLDP en todo el switch sin borrar su configuración.
+      warning: Teléfonos y puntos de acceso que dependen de LLDP pueden dejar de configurarse bien.
+  lockoutRecovery: Esta guía no afecta al acceso de gestión.
+sources:
+  - title: AOS-CX 10.15 Fundamentals Guide (4100i, 6000, 6100) — lldp
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Dev_disc/LLDP_cmds/lld.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — show lldp neighbor-info
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Dev_disc/LLDP_cmds/sho-lld-nei-inf-10.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — lldp transmit
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Dev_disc/LLDP_cmds/lld-tra-10.htm
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: AOS-CX 10.15
+  notes: Sintaxis contrastada con la documentación oficial; falta probarla en un 6100 real.

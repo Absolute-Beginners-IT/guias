@@ -1,0 +1,149 @@
+platform: aruba-aoscx
+task: mgmt-ip
+summary: >-
+  Asigna una IP fija y una ruta por defecto a la interfaz de gestión en banda de un
+  Aruba CX 6100, protegido con el modo checkpoint auto.
+risk:
+  level: high
+  reason: >-
+    Si estás conectado por red, la sesión se corta al quitar DHCP o cambiar la
+    dirección. Con datos equivocados el switch queda inalcanzable por red.
+params:
+  - id: vlanId
+    label: VLAN de gestión
+    type: vlan-id
+    example: '1'
+    help: De fábrica la gestión en banda está en la VLAN 1. La VLAN tiene que existir.
+  - id: ipCidr
+    label: IP de gestión con prefijo
+    type: cidr
+    example: 192.168.10.20/24
+  - id: gateway
+    label: Puerta de enlace
+    type: ipv4
+    example: 192.168.10.1
+    help: Tiene que estar en la misma red que la IP de gestión.
+  - id: checkpointName
+    label: Nombre del checkpoint de respaldo
+    type: text
+    example: antes-ip-gestion
+    pattern: '^(?!CPC)[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres; letras, números, guion y guion bajo; no puede empezar por CPC.
+  - id: minutes
+    label: Minutos de margen del modo auto
+    type: number
+    min: 1
+    max: 60
+    example: '10'
+    help: Tiempo para volver a entrar por la IP nueva antes de que el switch deshaga el cambio solo.
+preflight:
+  - text: >-
+      Mira qué dirección tiene ahora la interfaz y si viene de DHCP. Si ya tiene otra
+      IP fija, anótala: esta guía no la quita.
+    command: show ip interface vlan {{vlanId}}
+  - text: Guarda un checkpoint con la configuración actual.
+    command: copy running-config checkpoint {{checkpointName}}
+  - text: Hazlo por el puerto de consola si puedes; así no dependes de la IP que vas a cambiar.
+  - text: Comprueba desde otro equipo que la IP nueva no responde a ping, para no duplicarla.
+steps:
+  - title: Activar el modo checkpoint auto
+    commands:
+      - checkpoint auto {{minutes}}
+    explanation: >-
+      Abre una ventana de {{minutes}} minutos. Si no confirmas antes de que venza,
+      el switch restaura la configuración que tenía en este momento.
+  - title: Entrar en la interfaz de gestión
+    commands:
+      - config
+      - interface vlan {{vlanId}}
+    explanation: >-
+      Entra en la interfaz lógica de la VLAN {{vlanId}}. El prompt pasa a
+      switch(config-if-vlan)#.
+  - title: Quitar DHCP y asignar la IP fija
+    commands:
+      - no ip dhcp
+      - ip address {{ipCidr}}
+      - no shutdown
+    explanation: >-
+      Deja de pedir la dirección por DHCP, asigna la IP fija y asegura que la
+      interfaz está habilitada.
+    warning: Si estás conectado por red a la dirección anterior, la sesión se corta en este paso.
+    breakdown:
+      - token: no ip dhcp
+        meaning: Desactiva el cliente DHCP de la interfaz, que es el ajuste de fábrica.
+      - token: ip address {{ipCidr}}
+        meaning: Dirección IPv4 y longitud de la máscara en bits.
+  - title: Definir la ruta por defecto
+    commands:
+      - exit
+      - ip route 0.0.0.0/0 {{gateway}}
+    explanation: >-
+      Vuelve a configuración global y añade la ruta por defecto hacia {{gateway}},
+      para que el switch sea alcanzable desde otras redes.
+    breakdown:
+      - token: ip route 0.0.0.0/0
+        meaning: Ruta que se usa para cualquier destino que no tenga una ruta más específica.
+      - token: '{{gateway}}'
+        meaning: Dirección del siguiente salto, es decir, la puerta de enlace de la red de gestión.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve al modo Manager.
+  - title: Entrar por la IP nueva
+    manual: true
+    explanation: >-
+      Abre una sesión SSH nueva hacia la IP de {{ipCidr}} desde tu equipo de
+      administración y haz las comprobaciones de la sección Verificación. Hazlo
+      dentro de la ventana de {{minutes}} minutos.
+  - title: Confirmar el cambio
+    commands:
+      - checkpoint auto confirm
+    explanation: Termina el modo auto y deja el cambio como definitivo en ejecución.
+    warning: Ejecútalo solo si pudiste entrar por la IP nueva. Si no confirmas a tiempo, el switch vuelve solo al estado anterior.
+  - title: Guardar en la configuración de arranque
+    commands:
+      - write memory
+    explanation: Copia la configuración en ejecución a la de arranque.
+verification:
+  - command: show ip interface vlan {{vlanId}}
+    expect: La interfaz está up y muestra la dirección IPv4 {{ipCidr}}.
+  - command: ping {{gateway}}
+    expect: La puerta de enlace responde.
+rollback:
+  summary: >-
+    Mientras el modo auto esté activo, la vuelta atrás es no confirmar. Si ya
+    confirmaste, vuelve al checkpoint.
+  steps:
+    - title: Si todavía no confirmaste
+      manual: true
+      explanation: >-
+        No ejecutes checkpoint auto confirm. Cuando venza la ventana, el switch
+        restaura solo la configuración anterior, con su IP de antes.
+    - title: Si ya confirmaste
+      commands:
+        - checkpoint rollback {{checkpointName}}
+        - write memory
+      explanation: Vuelve al estado guardado antes de empezar. Hazlo por consola, porque la IP cambia otra vez.
+  lockoutRecovery: >-
+    Si no puedes entrar por la IP nueva y el modo auto sigue activo, espera: al
+    vencer la ventana el switch recupera la IP anterior. Si ya habías confirmado,
+    entra por el puerto de consola y aplica el checkpoint.
+sources:
+  - title: AOS-CX 10.15 Fundamentals Guide (4100i, 6000, 6100) — interfaz de gestión en banda
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_IniCfg/cnf-man-int.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — ip address
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_IfaceCfg/Iface_cmds/ip-add-10.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — show ip interface
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_IfaceCfg/Iface_cmds/sho-ip-int-10.htm
+  - title: AOS-CX 10.15 IP Routing Guide (4100i, 5420, 6000, 6100, 6200) — ip route
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/ip_route_4100i-5420-6000-6100-6200/Content/Chp_StatRoute/StatRoute_cmds/ip-rou83.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — checkpoint auto
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/Chk_cmds/che-aut.htm
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: AOS-CX 10.15
+  notes: >-
+    Los comandos de la interfaz y de la ruta están contrastados con la documentación
+    oficial. No se comprobaron en la documentación el comando ping ni qué ocurre si
+    la interfaz ya tenía otra IP fija. Falta probar la guía en un 6100 real.

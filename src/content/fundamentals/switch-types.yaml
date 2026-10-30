@@ -1,0 +1,58 @@
+id: switch-types
+title: Tipos de switch y lo que pueden hacer
+order: 3
+summary: >-
+  De qué depende el potencial de un switch: si es gestionado, si enruta, si da
+  alimentación por el cable, qué velocidades admite y cómo crece la red con él.
+sections:
+  - heading: No gestionado, inteligente y gestionado
+    paragraphs:
+      - >-
+        Un switch no gestionado se enchufa y funciona, pero no se puede configurar:
+        todos los puertos están en la misma red y no hay forma de ver qué pasa. Sirve
+        para ampliar unos pocos puertos en un despacho, no para la red de una empresa.
+      - >-
+        Un switch gestionado tiene su propio sistema operativo y se configura por
+        consola, SSH o web: VLAN, agregaciones, seguridad, monitorización. Entre los dos
+        están los llamados inteligentes o smart, gestionados con menos funciones, casi
+        siempre solo por web. Todos los equipos de este manual son gestionados.
+  - heading: Capa 2 y capa 3
+    paragraphs:
+      - >-
+        Un switch de capa 2 conmuta dentro de cada VLAN y necesita un router para pasar
+        de una a otra. Uno de capa 3 puede enrutar entre VLAN por sí mismo, con rutas
+        estáticas o protocolos de enrutamiento según el modelo. Muchos switches de
+        acceso, como los de este manual, admiten algo de capa 3 aunque en la red se usen
+        como capa 2.
+  - heading: PoE, alimentar equipos por el cable
+    paragraphs:
+      - >-
+        Power over Ethernet permite que el switch alimente por el mismo cable de red a
+        teléfonos IP, puntos de acceso y cámaras, sin enchufe aparte. Cada estándar da
+        más potencia por puerto, y además el switch tiene un presupuesto total: si se
+        agota, los puertos de menor prioridad se quedan sin corriente.
+    points:
+      - '802.3af (PoE): hasta 15,4 W por puerto en el switch; teléfonos y cámaras sencillas.'
+      - '802.3at (PoE+): hasta 30 W; la mayoría de puntos de acceso.'
+      - '802.3bt (PoE++): 60 W o 90 W; equipos exigentes como cámaras con motor o pantallas.'
+  - heading: Puertos y velocidades
+    paragraphs:
+      - >-
+        Los puertos de cobre (RJ45) suelen ser de 1 Gbit/s para los equipos de los
+        usuarios. Los puertos SFP y SFP+ alojan un módulo intercambiable, de fibra o de
+        cobre, y se usan para los enlaces entre switches y hacia los servidores: SFP
+        llega a 1 Gbit/s y SFP+ a 10 Gbit/s. Por ejemplo, un switch de 48 puertos de
+        cobre y 4 SFP+ deja los SFP+ para subir al switch principal.
+  - heading: Cómo crece la red
+    paragraphs:
+      - >-
+        Una red pequeña suele tener un switch principal (núcleo) y switches de acceso en
+        cada planta o armario, unidos por enlaces rápidos. Para que la caída de un
+        cable no deje a una planta aislada se ponen enlaces redundantes, y entonces hacen
+        falta Spanning Tree o agregaciones LACP para que esa redundancia no forme un
+        bucle. Algunos modelos se pueden apilar, es decir, varios switches se gestionan
+        como si fueran uno solo.
+related:
+  - poe-port
+  - lag-create
+  - stp-edge-protection

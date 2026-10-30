@@ -1,0 +1,83 @@
+platform: ruijie-reyee
+task: dhcp-snooping
+summary: >-
+  Activa DHCP snooping en un Ruijie NBS3200 desde su interfaz web y marca como
+  confiable solo el puerto por el que llega el servidor DHCP.
+risk:
+  level: high
+  reason: >-
+    En este switch DHCP snooping se activa para todo el equipo, no para una VLAN. Si
+    el puerto hacia el servidor DHCP no queda como confiable, ningún equipo del switch
+    recibe dirección al renovarla, y el fallo puede tardar horas en verse.
+params:
+  - id: trustedPort
+    label: Puerto hacia el servidor DHCP
+    type: text
+    example: Gi48
+    pattern: '^[A-Za-z]{2}\d{1,2}$'
+    patternHint: Nombre del puerto tal como aparece en el panel, por ejemplo Gi48.
+    help: El enlace hacia el switch troncal o el puerto donde está conectado el servidor DHCP.
+preflight:
+  - text: >-
+      Haz antes una copia de la configuración (Local Device > System > Backup >
+      Backup & Import, botón Backup).
+  - text: >-
+      Averigua por qué puerto llega el servidor DHCP de todas las VLAN del switch. Si
+      hay más de uno, por ejemplo un servidor conectado en un puerto local, todos
+      tienen que quedar como confiables.
+  - text: >-
+      En Local Device > Ports > MGMT IP > MGMT IP, mira si la IP de gestión es DHCP.
+      Si lo es, el puerto confiable también tiene que ser el que lleva al servidor de
+      esa VLAN, o el switch perderá su IP al renovarla.
+  - text: Ten un equipo de prueba en un puerto de usuario para forzar la renovación.
+steps:
+  - title: Abrir DHCP Snooping
+    manual: true
+    explanation: >-
+      Ve a Local Device > Security > DHCP Snooping. No uses Network-Wide >
+      Workspace > Wired > DHCP Snooping, que lo aplica a todos los switches de la red.
+  - title: Activar y marcar el puerto confiable
+    manual: true
+    explanation: >-
+      Activa DHCP Snooping, selecciona {{trustedPort}} en el panel de puertos como
+      puerto confiable y deja Option 82 desactivado. Pulsa Save.
+    warning: >-
+      Desde ese momento las peticiones DHCP solo salen por los puertos confiables y
+      solo se aceptan respuestas que lleguen por ellos.
+  - title: Probar con un equipo
+    manual: true
+    explanation: >-
+      En el equipo de prueba, libera y renueva la dirección (en Windows, ipconfig
+      /release y luego ipconfig /renew) y comprueba que recibe una IP de la red
+      correcta.
+verification:
+  - expect: >-
+      En DHCP Snooping, la función aparece activa y {{trustedPort}} es el único puerto
+      confiable, salvo los que añadiste a propósito.
+  - expect: >-
+      El equipo de prueba recibe una dirección del servidor legítimo después de
+      renovarla.
+rollback:
+  summary: Apaga DHCP snooping; los equipos vuelven a aceptar cualquier respuesta DHCP.
+  steps:
+    - title: Apagar DHCP snooping
+      manual: true
+      explanation: En Local Device > Security > DHCP Snooping, desactiva la función y pulsa Save.
+  lockoutRecovery: >-
+    Si la IP de gestión es estática, este cambio no afecta al acceso web. Si es DHCP y
+    el switch perdió su IP, conéctate a la IP de fábrica 10.44.77.200 si sigue
+    respondiendo, o usa el botón Reset mantenido más de 5 segundos para volver a
+    fábrica e importa la copia.
+sources:
+  - title: Ruijie Reyee NBS3200 V2 — ReyeeOS 2.341 Configuration Guide, apartado DHCP Snooping
+    url: https://reyee.ruijie.com/en-global/support/documents/slide_rg-nbs3200-24gt4xs-p-v2-nbs3200-48gt4xs-p-v2-switches-implementation-cookbook/
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: ReyeeOS 2.341
+  notes: >-
+    Menú, puertos confiables y Option 82 contrastados con la guía oficial. La guía no
+    documenta activar DHCP snooping por VLAN: en este modelo se activa para todo el
+    switch. Tampoco describe una tabla de asignaciones propia de DHCP snooping en esta
+    página; las entradas que registra se usan en IP Source Guard. Falta probarlo en
+    un NBS3200 real.

@@ -1,0 +1,18 @@
+id: lldp-neighbors
+title: Ver qué hay conectado con LLDP
+group: monitoring
+order: 4
+summary: Muestra qué equipo hay al otro lado de cada puerto (switch, teléfono, punto de acceso) gracias a LLDP.
+explanation: >-
+  LLDP es un protocolo estándar con el que los equipos de red se anuncian a sus
+  vecinos directos: nombre, modelo, puerto y dirección de gestión. Sirve para saber
+  qué hay conectado en cada puerto sin ir al armario, y para documentar la topología.
+  Viene activado de fábrica en las tres marcas. Lo que un switch anuncia también lo
+  ve cualquier equipo conectado, así que en puertos expuestos a usuarios conviene
+  valorar si debe anunciarse.
+risks:
+  - Consultar los vecinos no cambia nada.
+  - Desactivar LLDP deja sin información a los teléfonos y puntos de acceso que lo usan para configurarse.
+  - LLDP revela nombre, modelo y versión del switch a cualquier equipo conectado a un puerto que lo anuncie.
+prerequisites:
+  - Ninguno para consultar; para activarlo, acceso de administrador.

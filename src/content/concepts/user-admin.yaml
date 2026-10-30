@@ -1,0 +1,18 @@
+id: user-admin
+title: Crear un usuario administrador
+group: setup-access
+order: 4
+summary: Da de alta una cuenta de administración con nombre propio, para no trabajar con la cuenta genérica compartida.
+explanation: >-
+  Cada persona que administra el switch debería entrar con su propia cuenta. Así los
+  registros dicen quién hizo cada cambio, y cuando alguien deja el equipo se le quita
+  el acceso sin cambiar la contraseña de todos. La cuenta genérica de fábrica queda
+  como reserva para emergencias, con una contraseña fuerte guardada en el gestor de
+  contraseñas de la empresa.
+risks:
+  - Una cuenta de administrador más es una puerta más; con una contraseña débil compromete todo el switch.
+  - Borrar o cambiar la cuenta con la que estás conectado puede dejarte sin acceso.
+  - Este manual no guarda contraseñas; escribirlas en un comando las deja visibles en pantalla y en el historial de la sesión.
+prerequisites:
+  - Tener decidida la contraseña y guardada en el gestor de contraseñas de la empresa.
+  - Mantener abierta la sesión actual hasta comprobar que la cuenta nueva funciona.

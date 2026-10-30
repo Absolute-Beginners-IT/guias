@@ -1,0 +1,76 @@
+platform: mikrotik-routeros
+task: syslog-remote
+summary: >-
+  Crea en un MikroTik con RouterOS una acción de registro remoto hacia un servidor
+  syslog y envía a ella los mensajes informativos, de aviso, de error y críticos.
+risk:
+  level: low
+  reason: Enviar registros no afecta al tráfico ni al acceso de gestión.
+params:
+  - id: serverIp
+    label: IP del servidor syslog
+    type: ipv4
+    example: 192.168.10.30
+  - id: actionName
+    label: Nombre de la acción
+    type: text
+    example: syslogRemoto
+    pattern: '^[A-Za-z0-9_-]{1,32}$'
+    patternHint: Hasta 32 caracteres; letras, números, guion y guion bajo.
+preflight:
+  - text: Comprueba que la hora está sincronizada; si no, los registros llegan con la hora mal.
+    command: /system ntp client print
+  - text: Mira las acciones de registro que existen ya.
+    command: /system logging action print
+steps:
+  - title: Crear la acción de envío remoto
+    commands:
+      - /system logging action add name={{actionName}} target=remote remote={{serverIp}} remote-port=514
+    explanation: >-
+      Define un destino de registros que envía los mensajes por UDP al servidor
+      {{serverIp}}, puerto 514.
+    breakdown:
+      - token: target=remote
+        meaning: Los mensajes se envían a otro equipo en vez de guardarse en memoria o en disco.
+      - token: remote={{serverIp}} remote-port=514
+        meaning: Dirección y puerto del servidor syslog.
+  - title: Enviar a esa acción los mensajes importantes
+    commands:
+      - /system logging add topics=info action={{actionName}}
+      - /system logging add topics=warning action={{actionName}}
+      - /system logging add topics=error action={{actionName}}
+      - /system logging add topics=critical action={{actionName}}
+    explanation: >-
+      Crea una regla por cada tipo de mensaje. Se hacen por separado porque varios
+      temas en una misma regla se combinan, no se suman.
+  - title: Comprobar la llegada en el servidor
+    manual: true
+    explanation: >-
+      Provoca un mensaje inofensivo, por ejemplo entrando y saliendo de una sesión,
+      y búscalo en el servidor syslog filtrando por la IP del equipo.
+verification:
+  - command: /system logging print
+    expect: Aparecen las cuatro reglas nuevas con la acción {{actionName}}.
+rollback:
+  summary: Quita las reglas y la acción creadas.
+  steps:
+    - title: Quitar reglas y acción
+      commands:
+        - /system logging remove [find action={{actionName}}]
+        - /system logging action remove [find name={{actionName}}]
+      explanation: Elimina primero las reglas que usan la acción y después la propia acción.
+  lockoutRecovery: Este cambio no afecta al acceso de gestión.
+sources:
+  - title: RouterOS — Log
+    url: https://help.mikrotik.com/docs/display/ROS/Log
+status:
+  level: unverified
+  reviewed: '2026-10-14'
+  firmware: RouterOS 7
+  notes: >-
+    Marcada sin verificar. La documentación consultada confirma target=remote, el
+    puerto 514 por defecto y la forma de crear acciones y reglas, pero describe
+    remote-port como dirección y puerto juntos, lo que no coincide con el comando
+    de esta guía; confirma los nombres de las propiedades con la ayuda del equipo.
+    Que varios temas en una regla se combinan es el comportamiento conocido de
+    RouterOS, no algo leído en esa página. Falta probarla en un equipo real.

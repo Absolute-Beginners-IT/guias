@@ -1,0 +1,95 @@
+platform: ruijie-reyee
+task: lag-create
+summary: >-
+  Crea en un Ruijie NBS3200 una interfaz agregada con LACP a partir de dos puertos
+  libres, desde la interfaz web.
+risk:
+  level: high
+  reason: >-
+    Una agregación mal emparejada con el otro extremo puede formar un bucle de capa
+    2 y tumbar la red.
+params:
+  - id: lagId
+    label: Número de la interfaz agregada
+    type: number
+    min: 1
+    max: 128
+    example: '1'
+    help: El rango exacto lo indica la propia página; si no acepta el número, prueba otro.
+  - id: port1
+    label: Primer puerto miembro
+    type: text
+    example: Gi47
+    pattern: '^[A-Za-z]{2}\d{1,2}$'
+    patternHint: Nombre del puerto tal como aparece en el panel.
+  - id: port2
+    label: Segundo puerto miembro
+    type: text
+    example: Gi48
+    pattern: '^[A-Za-z]{2}\d{1,2}$'
+    patternHint: Nombre del puerto tal como aparece en el panel.
+    differentFrom:
+      param: port1
+      hint: Tiene que ser un puerto distinto del primero.
+preflight:
+  - text: Haz una copia de la configuración con la guía Guardar una copia de la configuración.
+  - text: >-
+      Confirma que {{port1}} y {{port2}} están libres y son del mismo tipo: no se
+      pueden agrupar puertos de cobre con puertos SFP.
+  - text: >-
+      No conectes los dos cables hasta que el otro extremo tenga también su
+      agregación con LACP configurada.
+steps:
+  - title: Abrir la configuración de agregados
+    manual: true
+    explanation: Ve a Local Device > Ports > Aggregate Ports > Aggregate Port Settings.
+  - title: Crear la interfaz agregada con LACP
+    manual: true
+    explanation: >-
+      Escribe el número {{lagId}}, selecciona en el panel los puertos {{port1}} y
+      {{port2}}, activa LACP y pulsa Save. La interfaz agregada aparece en el panel.
+    warning: >-
+      Activa LACP al crearla; una vez creada como estática no se puede cambiar el
+      modo LACP. Admite hasta ocho puertos miembro.
+  - title: Configurar las VLAN de la interfaz agregada
+    manual: true
+    explanation: >-
+      En Local Device > VLAN > Port List, configura la interfaz agregada como trunk
+      con la guía Configurar un puerto trunk, igual que un puerto suelto.
+  - title: Conectar los cables y comprobar
+    manual: true
+    explanation: Con el otro extremo configurado, conecta los dos cables y haz las comprobaciones.
+verification:
+  - expect: >-
+      En Local Device > Ports > Aggregate Ports, la interfaz {{lagId}} aparece con
+      {{port1}} y {{port2}} como miembros, y en la lista de puertos LACP ambos están
+      negociados con el otro extremo.
+rollback:
+  summary: >-
+    Antes de borrar la agregación, desconecta al menos uno de los dos cables: como
+    puertos sueltos, dos cables hacia el mismo switch formarían un bucle.
+  steps:
+    - title: Desconectar un cable de la agregación
+      manual: true
+      explanation: Quita uno de los dos cables antes de seguir.
+    - title: Borrar la interfaz agregada
+      manual: true
+      explanation: >-
+        En Aggregate Port Settings, selecciona la interfaz {{lagId}} y pulsa Delete
+        Selected. Los puertos quedan libres en el panel.
+  lockoutRecovery: >-
+    Si la red se vuelve inestable justo después de conectar los cables, sospecha de
+    un bucle y desconecta uno de los dos. Después revisa la configuración de los dos
+    extremos.
+sources:
+  - title: Ruijie Reyee NBS3200 V2 — ReyeeOS 2.341 Configuration Guide, apartado Aggregate Ports
+    url: https://reyee.ruijie.com/en-global/support/documents/slide_rg-nbs3200-24gt4xs-p-v2-nbs3200-48gt4xs-p-v2-switches-implementation-cookbook/
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: ReyeeOS 2.341
+  notes: >-
+    Pasos contrastados con la guía oficial, incluidos el máximo de ocho miembros, la
+    restricción de cobre y SFP y que el modo LACP no se cambia después. La guía no
+    indica el rango de números de la interfaz agregada ni cómo aparece en Port List.
+    Falta probarla en un NBS3200 real.

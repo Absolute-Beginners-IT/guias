@@ -1,0 +1,76 @@
+platform: ruijie-reyee
+task: firmware-upgrade
+summary: >-
+  Actualiza ReyeeOS en un Ruijie NBS3200 subiendo el archivo de firmware desde tu
+  equipo, conservando la configuración.
+risk:
+  level: high
+  reason: >-
+    El switch se reinicia y corta todo el tráfico durante el arranque. Un corte de
+    luz o un archivo equivocado durante la actualización puede dejarlo sin arrancar.
+params: []
+preflight:
+  - text: >-
+      Mira la versión actual en Local Device > Home > Basic Info y anótala.
+  - text: Haz una copia de la configuración con la guía Guardar una copia de la configuración.
+  - text: >-
+      Descarga el firmware para RG-NBS3200 desde la web oficial de Ruijie Reyee y
+      comprueba su suma MD5 con la publicada. Lee sus notas de versión: algunas
+      versiones corrigen fallos de la VLAN de gestión tras actualizar.
+  - text: Hazlo en una ventana de mantenimiento, con alimentación estable y sin cerrar el navegador.
+steps:
+  - title: Abrir la actualización local
+    manual: true
+    explanation: >-
+      Ve a Local Device > System > Upgrade > Local Upgrade. La página muestra el
+      modelo y la versión actual.
+  - title: Conservar la configuración
+    manual: true
+    explanation: Deja marcada la opción de mantener la configuración durante la actualización.
+  - title: Subir el firmware
+    manual: true
+    explanation: >-
+      Pulsa Browse, elige el archivo descargado y pulsa Upload. El switch instala la
+      versión y se reinicia. No recargues ni cierres el navegador hasta que vuelva a
+      aparecer la página de inicio de sesión.
+    warning: Se corta todo el tráfico del switch hasta que termina de arrancar.
+  - title: Volver a entrar
+    manual: true
+    explanation: Inicia sesión de nuevo cuando aparezca la página de acceso.
+verification:
+  - expect: En Local Device > Home > Basic Info, la versión de software es la nueva.
+  - expect: Las VLAN de Local Device > VLAN > VLAN List y la IP de gestión siguen como antes.
+rollback:
+  summary: >-
+    La guía oficial no describe una vuelta a la versión anterior. Lo previsible es
+    hacer una actualización local con el firmware anterior y, si hace falta,
+    importar la copia de configuración hecha antes de empezar.
+  steps:
+    - title: Instalar de nuevo la versión anterior
+      manual: true
+      explanation: >-
+        Descarga de la web de Ruijie Reyee el firmware de la versión que anotaste y
+        repite la actualización local con ese archivo.
+      warning: Vuelve a reiniciar el switch.
+    - title: Restaurar la configuración si cambió
+      manual: true
+      explanation: Importa la copia hecha antes de empezar con la guía Restaurar una configuración guardada.
+  lockoutRecovery: >-
+    Si después de actualizar no puedes entrar por la IP de gestión, conecta un
+    portátil en la misma red y prueba de nuevo. Si no hay forma, el botón Reset
+    mantenido más de 5 segundos devuelve el switch a fábrica (10.44.77.200,
+    contraseña admin).
+sources:
+  - title: Ruijie Reyee NBS3200 V2 — ReyeeOS 2.341 Configuration Guide, apartado Upgrade
+    url: https://reyee.ruijie.com/en-global/support/documents/slide_rg-nbs3200-24gt4xs-p-v2-nbs3200-48gt4xs-p-v2-switches-implementation-cookbook/
+  - title: Ruijie Reyee — firmware del RG-NBS3200
+    url: https://reyee.ruijie.com/en-global/resources/software/rg-nbs3200-firmware/nbs3200-340-firmware/
+status:
+  level: unverified
+  reviewed: '2026-10-14'
+  firmware: ReyeeOS 2.341
+  notes: >-
+    Marcada sin verificar porque la vuelta atrás no está en la guía oficial. Los
+    pasos de actualización local, la opción de conservar la configuración y el aviso
+    de no cerrar el navegador sí están contrastados. La guía describe también una
+    actualización en línea desde la misma sección. Falta probarla en un NBS3200 real.

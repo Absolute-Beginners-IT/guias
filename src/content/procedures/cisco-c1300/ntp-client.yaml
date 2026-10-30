@@ -1,0 +1,105 @@
+platform: cisco-c1300
+task: ntp-client
+summary: >-
+  Configura en un Cisco Catalyst 1300 el servidor de tiempo de la empresa por SNTP,
+  la zona horaria y el horario de verano europeo.
+risk:
+  level: low
+  reason: Sincronizar la hora no afecta al tráfico ni al acceso de gestión.
+params:
+  - id: ntpServer
+    label: Servidor de tiempo
+    type: text
+    example: 192.168.10.5
+    pattern: '^[A-Za-z0-9.-]{1,158}$'
+    patternHint: Una IP o un nombre de equipo, sin espacios.
+  - id: zoneName
+    label: Siglas de la zona horaria
+    type: text
+    example: CET
+    pattern: '^[A-Za-z]{1,4}$'
+    patternHint: De 1 a 4 letras.
+  - id: zoneOffset
+    label: Diferencia con UTC en horas
+    type: number
+    min: -12
+    max: 13
+    example: '1'
+    help: Para la España peninsular es 1.
+  - id: summerName
+    label: Siglas del horario de verano
+    type: text
+    example: CEST
+    pattern: '^[A-Za-z]{1,4}$'
+    patternHint: De 1 a 4 letras.
+preflight:
+  - text: Mira la hora, la fecha y de dónde la toma ahora el switch.
+    command: show clock detail
+  - text: >-
+      Mira los servidores configurados. De fábrica trae varios servidores públicos de
+      internet; si el switch no tiene salida a internet, no le sirven.
+    command: show sntp configuration
+steps:
+  - title: Entrar en modo configuración
+    commands:
+      - configure terminal
+    explanation: Pasa de Privileged EXEC a configuración global. El prompt termina en (config)#.
+  - title: Definir el servidor de tiempo
+    commands:
+      - sntp server {{ntpServer}} poll
+      - clock source sntp
+    explanation: >-
+      Añade {{ntpServer}} como servidor con consulta periódica y deja SNTP como
+      origen de la hora, que es el valor de fábrica. El cliente unicast viene
+      activado de fábrica.
+    breakdown:
+      - token: sntp server {{ntpServer}}
+        meaning: Servidor de tiempo, por IP o por nombre. Admite hasta 8.
+      - token: poll
+        meaning: El switch lo consulta periódicamente, cada 1024 segundos por defecto.
+  - title: Definir la zona horaria y el horario de verano
+    commands:
+      - clock timezone {{zoneName}} {{zoneOffset}}
+      - clock summer-time {{summerName}} recurring eu
+    explanation: >-
+      Ajusta cómo se muestra la hora. Internamente el switch sigue en UTC. La opción
+      eu aplica las fechas de cambio de hora de la Unión Europea.
+    breakdown:
+      - token: clock timezone {{zoneName}} {{zoneOffset}}
+        meaning: Siglas de la zona y horas de diferencia con UTC.
+      - token: clock summer-time {{summerName}} recurring eu
+        meaning: Activa el horario de verano con las reglas europeas; suma 60 minutos.
+  - title: Salir y guardar
+    commands:
+      - end
+      - write memory
+    explanation: Vuelve a Privileged EXEC y guarda; el switch pide confirmación.
+verification:
+  - command: show sntp status
+    expect: La primera línea dice Clock is synchronized y la referencia es {{ntpServer}}. Puede tardar unos minutos.
+  - command: show clock detail
+    expect: La hora es la correcta, el origen es SNTP y aparecen la zona {{zoneName}} y el horario de verano {{summerName}}.
+rollback:
+  summary: Quita el servidor y los ajustes de zona añadidos.
+  steps:
+    - title: Quitar servidor, zona horaria y horario de verano
+      commands:
+        - configure terminal
+        - no sntp server {{ntpServer}}
+        - no clock timezone
+        - no clock summer-time
+        - end
+        - write memory
+      explanation: Vuelve a los servidores y la zona de fábrica.
+  lockoutRecovery: Este cambio no afecta al acceso de gestión.
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — Clock Commands
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/clock-commands.html
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: >-
+    Sintaxis y valores de fábrica contrastados con la guía oficial de la CLI. La
+    guía no confirma de forma literal que el switch sincronice solo con los valores
+    de fábrica; compruébalo con show sntp status. Falta probarla en un C1300 real.

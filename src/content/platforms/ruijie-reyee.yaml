@@ -1,0 +1,45 @@
+id: ruijie-reyee
+vendor: Ruijie Reyee
+name: Ruijie NBS3200
+os: ReyeeOS
+models:
+  - RG-NBS3200-48GT4XS-P
+summary: >-
+  Switch de 48 puertos de cobre con PoE y 4 puertos SFP+, de la línea Reyee de
+  Ruijie. Se gestiona desde su interfaz web (Eweb) o desde Ruijie Cloud; estas guías
+  usan la interfaz web, donde los puertos se eligen en un panel con su nombre, por
+  ejemplo Gi14.
+management: web
+configPersistence: >-
+  Cada cambio se aplica al pulsar Save u OK en la página correspondiente; no hay un
+  paso equivalente a write memory. En el modo de red autoorganizada, algunos ajustes
+  globales se sincronizan con los demás equipos Reyee de la red.
+safetyNets:
+  - name: Copia de la configuración
+    description: >-
+      Local Device > System > Backup > Backup & Import, botón Backup. Descarga un
+      archivo con la configuración a tu equipo. Es la única vuelta atrás completa;
+      hazla antes de cada cambio.
+  - name: Importar una copia
+    description: >-
+      En la misma página, Browse e Import aplican un archivo guardado. El switch se
+      reinicia al importarlo.
+  - name: Restablecer valores de fábrica
+    description: >-
+      Si pierdes la IP o la contraseña, mantener pulsado el botón Reset del panel más
+      de 5 segundos con el equipo encendido lo devuelve a fábrica (IP 10.44.77.200,
+      contraseña admin). Borra toda la configuración.
+sources:
+  - title: Ruijie Reyee RG-NBS3200-24GT4XS-P-V2, NBS3200-48GT4XS-P-V2 — ReyeeOS 2.341 Configuration Guide
+    url: https://reyee.ruijie.com/en-global/support/documents/slide_rg-nbs3200-24gt4xs-p-v2-nbs3200-48gt4xs-p-v2-switches-implementation-cookbook/
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: ReyeeOS 2.341
+  notes: >-
+    Contrastado con la guía oficial de configuración web de ReyeeOS 2.341, que cubre
+    la versión V2 del modelo (hardware 1.0x). Si tu equipo no es V2 o tiene otra
+    versión de ReyeeOS, los menús pueden variar algo. Las rutas de menú son las del
+    modo de red autoorganizada, el de fábrica, que empiezan por Local Device; en
+    modo Standalone se configura solo el equipo y los menús cambian de forma. No se encontró una
+    referencia oficial de comandos de consola para este modelo.

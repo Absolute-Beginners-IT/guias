@@ -1,0 +1,69 @@
+platform: cisco-c1300
+task: config-backup
+summary: >-
+  Copia la configuración en ejecución de un Cisco Catalyst 1300 a un servidor TFTP,
+  para tener un punto de retorno fuera del switch.
+risk:
+  level: low
+  reason: Copiar la configuración a un servidor no modifica el switch ni afecta al tráfico.
+params:
+  - id: serverIp
+    label: IP del servidor TFTP
+    type: ipv4
+    example: 192.168.10.50
+    help: El servidor tiene que estar encendido, con el servicio TFTP activo y alcanzable desde el switch.
+  - id: fileName
+    label: Nombre del archivo
+    type: text
+    example: c1300-antes-vlan-20.txt
+    pattern: '^[A-Za-z0-9._-]{1,60}$'
+    patternHint: Hasta 60 caracteres; letras, números, punto, guion y guion bajo, sin espacios.
+preflight:
+  - text: >-
+      TFTP envía el archivo sin cifrar y sin autenticación. Úsalo solo dentro de la
+      red de gestión; la guía oficial admite también destinos scp:// y usb://.
+  - text: >-
+      Este switch no tiene checkpoints con nombre. Su punto de retorno interno es la
+      configuración de arranque: mientras no ejecutes write memory, sigue siendo la
+      anterior a tus cambios.
+steps:
+  - title: Copiar la configuración al servidor
+    commands:
+      - copy running-config tftp://{{serverIp}}/{{fileName}}
+    explanation: >-
+      Envía al servidor la configuración que está funcionando ahora mismo, guardada
+      o no. Se ejecuta en modo Privileged EXEC (prompt terminado en #). Los datos
+      sensibles se copian cifrados por defecto.
+    breakdown:
+      - token: copy running-config
+        meaning: Toma como origen la configuración en ejecución. Con startup-config se copia la de arranque.
+      - token: tftp://{{serverIp}}/{{fileName}}
+        meaning: Destino; servidor TFTP y nombre con el que queda el archivo.
+  - title: Comprobar el archivo en el servidor
+    manual: true
+    explanation: >-
+      Abre {{fileName}} en el servidor y confirma que no está vacío y que contiene
+      la configuración del switch. Después muévelo al repositorio de copias de la
+      empresa.
+verification:
+  - command: show running-config
+    expect: >-
+      El contenido coincide con el del archivo {{fileName}} que quedó en el
+      servidor.
+rollback:
+  summary: No hay nada que deshacer en el switch; la copia vive en el servidor.
+  steps:
+    - title: Si la copia no hace falta
+      manual: true
+      explanation: Borra el archivo {{fileName}} en el servidor TFTP.
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — File System Commands (copy)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/file-system-commands.html
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: >-
+    La sintaxis de copy está contrastada con la guía oficial, cuyo ejemplo usa
+    startup-config como origen. La guía no muestra el mensaje de confirmación de
+    esta copia. Falta probarla en un C1300 real.

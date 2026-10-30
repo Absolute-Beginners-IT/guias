@@ -1,0 +1,182 @@
+platform: aruba-aoscx
+task: lag-create
+summary: >-
+  Crea una LAG con LACP en un Aruba CX 6100 con dos puertos libres y la deja como
+  trunk con su VLAN nativa y sus VLAN permitidas.
+risk:
+  level: high
+  reason: >-
+    Una agregación mal emparejada con el otro extremo puede formar un bucle de capa
+    2. Además, al añadir un puerto a la LAG su configuración anterior se borra sin
+    aviso.
+params:
+  - id: lagId
+    label: Número de la LAG
+    type: number
+    min: 1
+    max: 256
+    example: '1'
+  - id: port1
+    label: Primer puerto miembro
+    type: text
+    example: 1/1/49
+    pattern: '^\d+/\d+/\d+$'
+    patternHint: Formato miembro/slot/puerto, por ejemplo 1/1/49.
+  - id: port2
+    label: Segundo puerto miembro
+    type: text
+    example: 1/1/50
+    pattern: '^\d+/\d+/\d+$'
+    patternHint: Formato miembro/slot/puerto, por ejemplo 1/1/50.
+  - id: nativeVlanId
+    label: VLAN nativa
+    type: vlan-id
+    example: '1'
+  - id: allowedVlans
+    label: VLAN permitidas
+    type: text
+    example: 1,20,30-35
+    pattern: '^\d{1,4}(-\d{1,4})?(,\d{1,4}(-\d{1,4})?)*$'
+    patternHint: IDs separados por comas y rangos con guion, sin espacios; por ejemplo 1,20,30-35.
+    help: Incluye la VLAN nativa y la de gestión si tienen que pasar por este enlace.
+  - id: checkpointName
+    label: Nombre del checkpoint de respaldo
+    type: text
+    example: antes-lag-1
+    pattern: '^(?!CPC)[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres; letras, números, guion y guion bajo; no puede empezar por CPC.
+preflight:
+  - text: Comprueba que ese número de LAG no existe ya.
+    command: show lacp aggregates
+  - text: >-
+      Confirma que los dos puertos están libres y sin enlace. Si alguno está en uso,
+      detente: al añadirlo a la LAG pierde su configuración.
+    command: show interface brief
+  - text: Confirma que todas las VLAN de la lista existen.
+    command: show vlan
+  - text: Guarda un checkpoint con la configuración actual.
+    command: copy running-config checkpoint {{checkpointName}}
+  - text: >-
+      No conectes los dos cables hasta que el otro extremo también tenga su
+      agregación con LACP configurada.
+steps:
+  - title: Crear la interfaz LAG
+    commands:
+      - config
+      - interface lag {{lagId}}
+      - no shutdown
+    explanation: >-
+      Crea la interfaz lógica lag {{lagId}} y la habilita. El prompt pasa a
+      switch(config-lag-if)#. El no shutdown de la LAG no cambia el estado de los
+      puertos miembro.
+    breakdown:
+      - token: interface lag {{lagId}}
+        meaning: Crea la LAG con ese número, de 1 a 256, o entra en ella si ya existe.
+  - title: Activar LACP
+    commands:
+      - lacp mode active
+    explanation: >-
+      Hace que la agregación sea dinámica: el switch envía tramas LACP para negociar
+      con el otro extremo. Sin este comando la LAG es estática.
+    breakdown:
+      - token: lacp mode active
+        meaning: Este switch inicia la negociación. Al menos un extremo tiene que estar en active; el otro puede estar en active o passive.
+  - title: Configurar las VLAN del trunk sobre la LAG
+    commands:
+      - vlan trunk native {{nativeVlanId}}
+      - vlan trunk allowed {{allowedVlans}}
+    explanation: >-
+      Define en la interfaz lógica la VLAN nativa y las VLAN permitidas. Se
+      configuran aquí y no en los puertos miembro.
+    warning: Al definir la VLAN nativa el switch permite todas las VLAN hasta que el segundo comando las limita.
+  - title: Añadir los puertos a la LAG
+    commands:
+      - interface {{port1}}
+      - no shutdown
+      - lag {{lagId}}
+      - interface {{port2}}
+      - no shutdown
+      - lag {{lagId}}
+    explanation: >-
+      Habilita cada puerto y lo asigna a la LAG {{lagId}}. Los puertos de una LAG
+      tienen que ser de la misma velocidad.
+    warning: Al añadir un puerto a una LAG, su configuración no predeterminada se elimina sin aviso.
+    breakdown:
+      - token: lag {{lagId}}
+        meaning: Asigna el puerto a esa LAG. La forma no lag lo saca.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve al modo Manager.
+  - title: Conectar los cables y comprobar
+    manual: true
+    explanation: >-
+      Con el otro extremo ya configurado, conecta los dos cables y haz las
+      comprobaciones de la sección Verificación.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: Copia la configuración en ejecución a la de arranque.
+    warning: Guarda solo después de verificar que la agregación se formó.
+verification:
+  - command: show lacp aggregates lag{{lagId}}
+    expect: >-
+      Aggregated-interfaces muestra {{port1}} y {{port2}}, y Aggregate mode es
+      active.
+  - command: show lacp interfaces
+    expect: Los dos puertos aparecen asociados a lag{{lagId}} y negociando con el otro extremo.
+  - command: show interface lag{{lagId}}
+    expect: >-
+      Admin state up, los dos puertos en Aggregated-interfaces, Native VLAN
+      {{nativeVlanId}} y Allowed VLAN List con {{allowedVlans}}.
+rollback:
+  summary: >-
+    Antes de borrar la LAG hay que apagar los puertos o quitar los cables: al
+    borrarla, los puertos vuelven a ser puertos sueltos habilitados y, con dos cables
+    hacia el mismo switch, formarían un bucle.
+  steps:
+    - title: Apagar los puertos miembro
+      commands:
+        - config
+        - interface {{port1}}
+        - shutdown
+        - interface {{port2}}
+        - shutdown
+      explanation: Corta el enlace por los dos puertos antes de deshacer la agregación.
+    - title: Borrar la LAG
+      commands:
+        - no interface lag {{lagId}}
+        - end
+      explanation: >-
+        Elimina la LAG. Los puertos salen de ella automáticamente y quedan como
+        puertos de capa 2 con la configuración por defecto.
+      warning: Revisa después con show interface brief en qué estado quedaron los puertos antes de volver a conectar nada.
+    - title: Volver al estado anterior completo
+      commands:
+        - checkpoint rollback {{checkpointName}}
+      explanation: Aplica el checkpoint guardado antes de empezar. Hazlo con los cables de la agregación desconectados.
+  lockoutRecovery: >-
+    Si la red se vuelve inestable o pierdes el acceso justo después de conectar los
+    cables, sospecha de un bucle: desconecta uno de los dos cables de la agregación.
+    Después entra por consola y revisa la configuración de los dos extremos.
+sources:
+  - title: AOS-CX 10.15 Link Aggregation Guide — configurar una agregación dinámica de capa 2
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/link_aggregation/Content/Chp_LAG/con-l2-dyn-agg-gro-10.htm
+  - title: AOS-CX 10.15 Link Aggregation Guide — interface lag
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/link_aggregation/Content/Chp_LAG/LACP_LAG_cmds/int-lag-10.htm
+  - title: AOS-CX 10.15 Link Aggregation Guide — lag
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/link_aggregation/Content/Chp_LAG/LACP_LAG_cmds/lag-10.htm
+  - title: AOS-CX 10.15 Link Aggregation Guide — lacp mode
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/link_aggregation/Content/Chp_LAG/LACP_LAG_cmds/lac-mod.htm
+  - title: AOS-CX 10.15 Link Aggregation Guide — borrar una LAG
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/link_aggregation/Content/Chp_LAG/rem-lag-10.htm
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: AOS-CX 10.15
+  notes: >-
+    Sintaxis contrastada con la documentación oficial. Dos páginas de esa
+    documentación se contradicen sobre si un puerto sacado de una LAG queda
+    habilitado o apagado, por eso la vuelta atrás apaga los puertos primero. El
+    comando show interface brief no se comprobó en la documentación. Falta probar la
+    guía en un 6100 real.

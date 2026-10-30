@@ -1,0 +1,47 @@
+platform: ruijie-reyee
+task: config-backup
+summary: >-
+  Descarga a tu equipo una copia de la configuración de un Ruijie NBS3200 desde su
+  interfaz web.
+risk:
+  level: low
+  reason: Generar la copia no modifica la configuración ni afecta al tráfico.
+params: []
+preflight:
+  - text: >-
+      Entra a la interfaz web del switch con su IP de gestión. De fábrica es
+      10.44.77.200, sin usuario y con la contraseña admin.
+  - text: La copia contiene información sensible de la red; ten decidido dónde vas a guardarla.
+steps:
+  - title: Abrir la página de copias
+    manual: true
+    explanation: Ve a Local Device > System > Backup > Backup & Import.
+  - title: Generar y descargar la copia
+    manual: true
+    explanation: >-
+      Pulsa Backup. El switch genera la copia de la configuración y el navegador la
+      descarga a tu equipo.
+  - title: Guardar la copia en el repositorio de la empresa
+    manual: true
+    explanation: >-
+      Renombra el archivo con el nombre del switch y la fecha, y guárdalo en el
+      repositorio de copias de la empresa. Una copia que solo está en tu portátil se
+      pierde con él.
+verification:
+  - expect: >-
+      El archivo descargado existe, no está vacío y tiene la fecha y hora de ahora.
+rollback:
+  summary: No hay nada que deshacer en el switch; la copia vive en tu equipo.
+  steps:
+    - title: Si la copia no hace falta
+      manual: true
+      explanation: Borra el archivo descargado.
+  lockoutRecovery: Hacer una copia no afecta al acceso de gestión.
+sources:
+  - title: Ruijie Reyee NBS3200 V2 — ReyeeOS 2.341 Configuration Guide, apartado Configuration Backup and Import
+    url: https://reyee.ruijie.com/en-global/support/documents/slide_rg-nbs3200-24gt4xs-p-v2-nbs3200-48gt4xs-p-v2-switches-implementation-cookbook/
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: ReyeeOS 2.341
+  notes: Pasos contrastados con la guía oficial de configuración web; falta probarlos en un NBS3200 real.

@@ -1,0 +1,80 @@
+platform: aruba-aoscx
+task: config-backup
+summary: >-
+  Guarda la configuración en ejecución de un Aruba CX 6100 como checkpoint con
+  nombre y, opcionalmente, saca una copia a una memoria USB.
+risk:
+  level: low
+  reason: Crear un checkpoint no modifica la configuración ni afecta al tráfico.
+params:
+  - id: checkpointName
+    label: Nombre del checkpoint
+    type: text
+    example: antes-vlan-20
+    pattern: '^(?!CPC)[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres; letras, números, guion y guion bajo; no puede empezar por CPC.
+    help: Usa un nombre que diga para qué es; los que empiezan por CPC los reserva el sistema.
+preflight:
+  - text: Revisa los checkpoints que ya existen para no repetir un nombre.
+    command: show checkpoint
+steps:
+  - title: Crear el checkpoint
+    commands:
+      - copy running-config checkpoint {{checkpointName}}
+    explanation: >-
+      Copia la configuración en ejecución a un checkpoint nuevo. Se ejecuta en modo
+      Manager (prompt switch#) y el switch responde Success.
+    breakdown:
+      - token: copy running-config
+        meaning: Toma como origen la configuración que está funcionando ahora mismo, guardada o no.
+      - token: checkpoint {{checkpointName}}
+        meaning: Destino de la copia; crea un checkpoint con ese nombre dentro del switch.
+  - title: 'Opcional: sacar una copia a una memoria USB'
+    commands:
+      - config
+      - usb
+      - end
+      - usb mount
+      - copy running-config usb:/{{checkpointName}} cli
+    explanation: >-
+      Habilita y monta el puerto USB y copia la configuración en formato de texto
+      (CLI). La memoria tiene que estar formateada en FAT. Sirve para tener una copia
+      fuera del switch.
+    warning: >-
+      El comando usb cambia la configuración del switch (deja el puerto USB
+      habilitado). Si en tu empresa los puertos USB deben estar deshabilitados, no
+      hagas este paso.
+    breakdown:
+      - token: usb:/{{checkpointName}}
+        meaning: Ruta del archivo de destino en la memoria USB.
+      - token: cli
+        meaning: Formato del archivo. La alternativa es json.
+verification:
+  - command: show checkpoint
+    expect: >-
+      Una fila con el nombre {{checkpointName}}, tipo checkpoint o latest, y escrita
+      por User con la fecha de hoy.
+rollback:
+  summary: >-
+    No hay nada que deshacer en la configuración. Si el checkpoint no hace falta, se
+    puede borrar.
+  steps:
+    - title: Borrar el checkpoint
+      commands:
+        - erase checkpoint {{checkpointName}}
+      explanation: Elimina solo ese checkpoint. No toca la configuración en ejecución ni la de arranque.
+      warning: No uses erase checkpoint all ni erase startup-config; borran todos los checkpoints o la configuración de arranque.
+sources:
+  - title: AOS-CX 10.15 Fundamentals Guide (4100i, 6000, 6100) — copy running-config a checkpoint
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/Chk_cmds/cop-run-con-st-con-che-che-nam.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — show checkpoint
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/Chk_cmds/sho-che-lis.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — copia a USB
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/Chk_cmds/cop-run-con-sto-url.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — erase
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/Chk_cmds/era-ch-che-nam-sta-con.htm
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: AOS-CX 10.15
+  notes: Sintaxis contrastada con la documentación oficial; falta probarla en un 6100 real.

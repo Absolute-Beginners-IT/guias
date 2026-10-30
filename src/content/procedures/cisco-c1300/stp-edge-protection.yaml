@@ -1,0 +1,149 @@
+platform: cisco-c1300
+task: stp-edge-protection
+summary: >-
+  Comprueba que Spanning Tree está activo en un Cisco Catalyst 1300 y marca un
+  puerto de acceso como puerto de borde (PortFast) con BPDU Guard, para que un
+  bucle o un switch no autorizado lo apaguen.
+risk:
+  level: medium
+  reason: >-
+    Solo toca un puerto de acceso, pero si en realidad va a otro switch, PortFast
+    le quita la protección contra bucles y BPDU Guard lo apaga en cuanto reciba un
+    mensaje de Spanning Tree.
+params:
+  - id: interfaceId
+    label: Puerto de acceso
+    type: text
+    example: gi1/0/10
+    pattern: '^(gi|te|tw|fi)\d+/0/\d+$'
+    patternHint: Tipo y número en formato unidad/0/puerto, por ejemplo gi1/0/10.
+    help: Un puerto con un solo equipo final, nunca un enlace a otro switch.
+preflight:
+  - text: >-
+      Mira si Spanning Tree está activo y en qué modo. La primera línea tiene que
+      decir Spanning tree enabled; de fábrica el modo es RSTP. Si dice disabled,
+      para: activarlo recalcula la topología y se planifica aparte.
+    command: show spanning-tree
+  - text: >-
+      Si el modo es MSTP, ten en cuenta que la guía de administración indica que
+      el puerto de borde no funciona en ese modo; BPDU Guard sí se puede aplicar.
+  - text: Mira cómo está el puerto ahora, incluidas las líneas Port Fast y BPDU guard.
+    command: show spanning-tree detail
+  - text: >-
+      Guarda la configuración actual del puerto y confirma que es un puerto de
+      acceso, no un trunk hacia otro switch.
+    command: show running-config interface {{interfaceId}}
+steps:
+  - title: Entrar en la configuración del puerto
+    commands:
+      - configure terminal
+      - interface {{interfaceId}}
+    explanation: Pasa a configuración global y entra en el puerto. El prompt termina en (config-if)#.
+  - title: Marcar el puerto como puerto de borde
+    commands:
+      - spanning-tree portfast
+    explanation: >-
+      Activa PortFast en el puerto: al levantarse el enlace pasa directamente a
+      reenviar tráfico, sin esperar los tiempos de Spanning Tree. De fábrica está
+      en auto, que espera 3 segundos y solo lo activa si no llegan mensajes de
+      Spanning Tree.
+    warning: No lo apliques en un enlace a otro switch; ese enlace perdería la protección contra bucles.
+    breakdown:
+      - token: spanning-tree portfast
+        meaning: PortFast inmediato. Con la palabra auto vuelve al comportamiento de fábrica.
+  - title: Activar BPDU Guard
+    commands:
+      - spanning-tree bpduguard enable
+    explanation: >-
+      Si por este puerto llega un mensaje de Spanning Tree (BPDU), el switch lo
+      apaga y genera un aviso SNMP. Así, conectar un switch donde solo debería
+      haber un ordenador deja ese puerto fuera de servicio en vez de arriesgar un
+      bucle.
+    warning: >-
+      Esta forma del comando no aparece en la guía de la CLI del C1300; viene de la
+      guía de la familia Cisco Business 350. Si el switch la rechaza, activa BPDU
+      Guard en la web, en Spanning Tree > STP Interface Settings.
+    breakdown:
+      - token: spanning-tree bpduguard
+        meaning: Protección BPDU Guard del puerto. Está desactivada de fábrica.
+      - token: enable
+        meaning: La activa; disable la desactiva.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve a Privileged EXEC.
+  - title: Comprobar que el equipo conectado funciona
+    manual: true
+    explanation: >-
+      Haz las comprobaciones de la sección Verificación y confirma que el equipo
+      del puerto {{interfaceId}} sigue teniendo red.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: >-
+      Copia la configuración en ejecución a la de arranque. El switch pide
+      confirmación antes de sobrescribirla.
+verification:
+  - command: show spanning-tree detail
+    expect: >-
+      En el bloque del puerto {{interfaceId}}, Port Fast dice Yes y BPDU guard
+      dice Enabled.
+  - command: show errdisable interfaces {{interfaceId}}
+    expect: El puerto no aparece apagado por el sistema.
+rollback:
+  summary: >-
+    Quita BPDU Guard y devuelve PortFast a su valor de fábrica (auto). Si BPDU Guard
+    ya apagó el puerto, primero quita lo que causó el apagado y después reactívalo.
+  steps:
+    - title: Reactivar un puerto apagado por BPDU Guard
+      commands:
+        - show errdisable interfaces {{interfaceId}}
+        - errdisable recovery reset interface {{interfaceId}}
+      explanation: >-
+        La primera orden muestra si el puerto está apagado y por qué (stp-bpdu-guard).
+        La segunda lo vuelve a activar. Antes, desconecta el switch o el equipo que
+        envió los mensajes de Spanning Tree, o se volverá a apagar.
+      warning: >-
+        La reactivación automática por esta causa está desactivada de fábrica. Se
+        puede activar con errdisable recovery cause stp-bpdu-guard, y el switch
+        reactiva el puerto pasados 300 segundos.
+    - title: Quitar la protección del puerto
+      commands:
+        - configure terminal
+        - interface {{interfaceId}}
+        - no spanning-tree bpduguard
+        - spanning-tree portfast auto
+        - end
+      explanation: >-
+        Devuelve BPDU Guard a su valor de fábrica (desactivado) y PortFast a auto,
+        que es el modo de fábrica.
+    - title: Si ya habías guardado con write memory
+      commands:
+        - write memory
+      explanation: Guarda de nuevo para que la vuelta atrás sobreviva a un reinicio.
+  lockoutRecovery: >-
+    Este cambio no afecta a la gestión salvo que lo apliques al puerto por el que
+    estás conectado. Si BPDU Guard apagó ese puerto, entra por consola o por otro
+    puerto y reactívalo con errdisable recovery reset interface.
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — Spanning Tree Commands
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/spanning-tree-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — Ethernet Configuration Commands (errdisable)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/ethernet-configuration-commands.html
+  - title: Cisco Catalyst 1300 Administration Guide — Spanning Tree
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/Administration-Guide/catalyst-1300-admin-guide/spanning-tree.html
+  - title: Cisco Catalyst 1300 — STP Interface Settings (ayuda de la web, BPDU Guard)
+    url: https://www.cisco.com/web/fw/tools/cisco-business/emulators/switch/catalyst/c1300-24mgp-4x/html/cat1k/english/1300/t_stp_interface_settings.html
+  - title: Cisco Business 350 CLI Guide — Spanning Tree Commands (spanning-tree bpduguard)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/lan/csbms/CBS_250_350/CLI/cbs-350-cli-/spanning-tree-commands.html
+status:
+  level: unverified
+  reviewed: '2026-10-14'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: >-
+    show spanning-tree, spanning-tree portfast, show errdisable interfaces y
+    errdisable recovery reset están contrastados con la guía de la CLI del C1300.
+    spanning-tree bpduguard enable no aparece en esa guía: la ayuda de la web del
+    C1300 confirma que la función BPDU Guard existe y la forma del comando sale de
+    la guía de la CLI de Cisco Business 350. Tampoco está documentado el texto
+    exacto de Port Fast con PortFast activado. Falta probarlo en un C1300 real.

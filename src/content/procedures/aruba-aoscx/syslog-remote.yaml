@@ -1,0 +1,78 @@
+platform: aruba-aoscx
+task: syslog-remote
+summary: >-
+  Envía los registros de un Aruba CX 6100 a un servidor syslog por UDP 514, desde el
+  nivel de severidad elegido.
+risk:
+  level: low
+  reason: Enviar registros no afecta al tráfico ni al acceso de gestión.
+params:
+  - id: serverIp
+    label: IP del servidor syslog
+    type: ipv4
+    example: 192.168.10.30
+  - id: severity
+    label: Severidad mínima
+    type: choice
+    example: info
+    options:
+      - info
+      - notice
+      - warning
+      - err
+    help: info es el valor de fábrica y lo habitual. Cuanto más alto el nivel, menos mensajes.
+preflight:
+  - text: Comprueba que la hora está sincronizada; si no, los registros llegan con la hora mal.
+    command: show clock
+  - text: Confirma con quien administra el servidor syslog que acepta mensajes desde la IP de gestión del switch.
+steps:
+  - title: Entrar en modo configuración
+    commands:
+      - config
+    explanation: Pasa a configuración global. El prompt cambia a switch(config)#.
+  - title: Definir el servidor syslog
+    commands:
+      - logging {{serverIp}} severity {{severity}}
+    explanation: >-
+      Envía al servidor {{serverIp}} los mensajes de severidad {{severity}} o más
+      grave. Sin indicar transporte usa UDP en el puerto 514.
+    breakdown:
+      - token: logging {{serverIp}}
+        meaning: Servidor syslog remoto. Admite también udp, tcp o tls con un puerto propio.
+      - token: severity {{severity}}
+        meaning: Nivel mínimo de los mensajes que se envían.
+  - title: Salir y guardar
+    commands:
+      - end
+      - write memory
+    explanation: Vuelve al modo Manager y guarda la configuración.
+  - title: Comprobar la llegada en el servidor
+    manual: true
+    explanation: >-
+      Provoca un mensaje inofensivo, por ejemplo entrando y saliendo de config, y
+      búscalo en el servidor syslog filtrando por la IP de gestión del switch.
+verification:
+  - command: show running-config
+    expect: Aparece la línea logging {{serverIp}} severity {{severity}}.
+rollback:
+  summary: Quita el servidor syslog añadido.
+  steps:
+    - title: Dejar de enviar registros a ese servidor
+      commands:
+        - config
+        - no logging {{serverIp}}
+        - end
+        - write memory
+      explanation: Elimina el reenvío al servidor {{serverIp}}.
+  lockoutRecovery: Este cambio no afecta al acceso de gestión.
+sources:
+  - title: AOS-CX 10.15 Diagnostics and Supportability Guide (4100i, 6000, 6100) — logging
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/diagnostics_4100i-6000-6100/Content/Chp_RSyslog/RSyslog_cmds/log-10.htm
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: AOS-CX 10.15
+  notes: >-
+    Sintaxis contrastada con la documentación oficial. La página consultada se corta
+    en la lista de severidades, así que los nombres de nivel ofrecidos hay que
+    confirmarlos con logging ? en el switch. Falta probarla en un 6100 real.

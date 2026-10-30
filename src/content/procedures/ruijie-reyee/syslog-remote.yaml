@@ -1,0 +1,51 @@
+platform: ruijie-reyee
+task: syslog-remote
+summary: >-
+  Activa el envío de registros de un Ruijie NBS3200 a un servidor syslog remoto por
+  UDP 514, desde la interfaz web.
+risk:
+  level: low
+  reason: Enviar registros no afecta al tráfico ni al acceso de gestión.
+params:
+  - id: serverIp
+    label: IP del servidor syslog
+    type: ipv4
+    example: 192.168.10.30
+preflight:
+  - text: Comprueba que la hora del switch está bien; si no, los registros llegan con la hora mal.
+  - text: Confirma que el servidor syslog acepta mensajes desde la IP de gestión del switch.
+steps:
+  - title: Abrir los ajustes de registro
+    manual: true
+    explanation: Ve a Local Device > System > Syslog > Log Settings.
+  - title: Activar Syslog
+    manual: true
+    explanation: Activa SYSLOG para que el switch pueda enviar registros a un servidor remoto.
+  - title: Añadir el servidor remoto
+    manual: true
+    explanation: >-
+      Pulsa Add junto a los servidores remotos y completa IP/Domain {{serverIp}},
+      Port 514 y Protocol UDP, el único admitido. Deja el formato RFC3164, el de
+      fábrica, salvo que el servidor pida RFC5424. Guarda.
+verification:
+  - expect: >-
+      El servidor aparece en la lista de servidores remotos y activado. En el
+      servidor syslog llegan mensajes del switch; provoca uno, por ejemplo saliendo
+      y entrando en la interfaz web.
+rollback:
+  summary: Quita el servidor remoto añadido.
+  steps:
+    - title: Quitar el servidor remoto
+      manual: true
+      explanation: En Log Settings, borra o desactiva el servidor {{serverIp}} y guarda.
+  lockoutRecovery: Este cambio no afecta al acceso de gestión.
+sources:
+  - title: Ruijie Reyee NBS3200 V2 — ReyeeOS 2.341 Configuration Guide, apartado System Logs
+    url: https://reyee.ruijie.com/en-global/support/documents/slide_rg-nbs3200-24gt4xs-p-v2-nbs3200-48gt4xs-p-v2-switches-implementation-cookbook/
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: ReyeeOS 2.341
+  notes: >-
+    Pasos y campos contrastados con la guía oficial. La guía no indica un puerto por
+    defecto; 514 es el estándar de syslog por UDP. Falta probarla en un NBS3200 real.

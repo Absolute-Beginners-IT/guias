@@ -1,0 +1,145 @@
+platform: mikrotik-routeros
+task: mgmt-acl
+summary: >-
+  Limita SSH, WinBox y la web de un MikroTik con RouterOS 7 a la red de
+  administración con la lista de direcciones permitidas de cada servicio, y apaga
+  los servicios de gestión que no se usan. Es la forma más acotada de hacerlo:
+  solo afecta a esos servicios y no filtra ningún otro tráfico.
+risk:
+  level: high
+  reason: >-
+    Si tu equipo no está dentro de la red permitida, pierdes el acceso de gestión
+    en el momento, y RouterOS guarda cada cambio sin paso de confirmación.
+params:
+  - id: mgmtNetwork
+    label: Red de administración permitida
+    type: cidr
+    example: 192.168.10.0/24
+    help: Red desde la que se podrá gestionar el switch. Tu equipo tiene que estar dentro.
+  - id: backupName
+    label: Nombre de la copia de respaldo
+    type: text
+    example: crs317-antes-acl-gestion
+    pattern: '^(flash/)?[A-Za-z0-9_-]{1,40}$'
+    patternHint: Hasta 40 caracteres; letras, números, guion y guion bajo, sin extensión. Puede empezar por flash/.
+preflight:
+  - text: >-
+      Mira qué servicios están activos, en qué puerto y desde qué direcciones. La
+      marca X indica un servicio desactivado; apunta cuáles lo están, para poder
+      volver atrás.
+    command: /ip service print
+  - text: >-
+      Confirma que la IP de tu equipo de administración está dentro de
+      {{mgmtNetwork}} y por qué servicio estás conectado ahora.
+  - text: >-
+      Mira si hay reglas de firewall en la cadena input. Esta guía no las toca, pero
+      si ya hay alguna que bloquea la gestión, tenla en cuenta.
+    command: /ip firewall filter print
+  - text: Guarda una copia completa de la configuración.
+    command: /system backup save name={{backupName}}
+  - text: Ten a mano el cable de consola serie del CRS317 por si te quedas fuera.
+steps:
+  - title: Activar Safe Mode
+    manual: true
+    explanation: >-
+      Pulsa Ctrl+X (o F4). El prompt pasa a mostrar SAFE. Si tu sesión se corta, los
+      cambios se deshacen solos al vencer el tiempo de espera de la conexión.
+  - title: Limitar SSH a la red de administración
+    commands:
+      - /ip service set ssh address={{mgmtNetwork}}
+    explanation: >-
+      El servicio SSH solo acepta conexiones desde {{mgmtNetwork}}. Las demás se
+      rechazan, aunque conozcan el usuario y la contraseña.
+    warning: Si tu equipo no está en esa red y estás conectado por SSH, pierdes el acceso en este paso.
+    breakdown:
+      - token: /ip service set ssh
+        meaning: Modifica las propiedades del servicio SSH.
+      - token: address={{mgmtNetwork}}
+        meaning: >-
+          Redes desde las que se permite el servicio. Admite varias separadas por
+          comas. Vacío significa cualquier origen.
+  - title: Limitar WinBox a la red de administración
+    commands:
+      - /ip service set winbox address={{mgmtNetwork}}
+    explanation: WinBox por IP (puerto 8291) solo acepta conexiones desde {{mgmtNetwork}}.
+    warning: Si estás conectado por WinBox desde fuera de esa red, pierdes el acceso en este paso.
+  - title: Limitar la web a la red de administración
+    commands:
+      - /ip service set www address={{mgmtNetwork}}
+      - /ip service set www-ssl address={{mgmtNetwork}}
+    explanation: >-
+      La web de gestión (WebFig), por HTTP y por HTTPS, solo acepta conexiones desde
+      {{mgmtNetwork}}. Se limitan las dos aunque alguna esté desactivada, para que
+      siga limitada si alguien la activa más adelante.
+  - title: 'Opcional: apagar los servicios de gestión que no se usan'
+    commands:
+      - /ip service disable telnet,ftp,api,api-ssl
+    explanation: >-
+      Apaga Telnet y FTP, que envían usuario y contraseña sin cifrar, y la API, que
+      solo hace falta si alguna herramienta gestiona el switch por ella.
+    warning: >-
+      Si un sistema de monitorización o de copias usa la API o FTP, deja de
+      funcionar. Si estás conectado por Telnet, la sesión se corta.
+  - title: Probar el acceso desde la red de administración
+    manual: true
+    explanation: >-
+      Sin cerrar esta sesión, abre otra por SSH y entra por WinBox y por la web desde
+      tu equipo de administración. RouterOS avisa de que otra sesión tiene Safe Mode:
+      responde d para dejar todo como está. Si puedes, comprueba desde un equipo fuera
+      de {{mgmtNetwork}} que no puede entrar.
+  - title: Salir de Safe Mode conservando el cambio
+    manual: true
+    explanation: >-
+      En la sesión original, pulsa Ctrl+X de nuevo. El cambio queda guardado. Si
+      algo no está bien, pulsa Ctrl+D en su lugar para salir deshaciendo lo hecho.
+verification:
+  - command: /ip service print
+    expect: >-
+      ssh, winbox, www y www-ssl muestran {{mgmtNetwork}} en la columna ADDRESS. Si
+      hiciste el paso opcional, telnet, ftp, api y api-ssl aparecen con la marca X.
+rollback:
+  summary: >-
+    Dentro de Safe Mode, Ctrl+D deshace todo. Fuera de Safe Mode se quita la
+    restricción de origen y se reactivan solo los servicios que estaban activos.
+  steps:
+    - title: Si sigues en Safe Mode
+      manual: true
+      explanation: Pulsa Ctrl+D. Sale de Safe Mode deshaciendo los cambios hechos en él.
+    - title: Si ya saliste de Safe Mode
+      commands:
+        - /ip service set ssh address=""
+        - /ip service set winbox address=""
+        - /ip service set www address=""
+        - /ip service set www-ssl address=""
+      explanation: Quita la restricción de origen de los cuatro servicios.
+    - title: Si apagaste servicios que hacían falta
+      commands:
+        - /ip service enable telnet,ftp,api,api-ssl
+      explanation: >-
+        Vuelve a activarlos. Quita de la lista los que ya estaban desactivados antes
+        de empezar, según lo que apuntaste.
+  lockoutRecovery: >-
+    Si la sesión se corta con Safe Mode activo, espera unos 9 minutos: los cambios
+    se deshacen solos. Si ya habías salido de Safe Mode, prueba WinBox por MAC desde
+    un equipo conectado al mismo segmento de capa 2: va por MAC, no por IP, así que
+    no depende de esta restricción si el servidor MAC sigue activo. Si no, conéctate
+    por el puerto de consola serie y quita la restricción. Como último recurso,
+    reiniciar la configuración con el botón de reset o reinstalar con Netinstall
+    borra toda la configuración; después hay que cargar la copia guardada.
+sources:
+  - title: RouterOS — Services (address, nombres y puertos de los servicios)
+    url: https://help.mikrotik.com/docs/display/ROS/Services
+status:
+  level: unverified
+  reviewed: '2026-10-14'
+  firmware: RouterOS 7
+  notes: >-
+    Marcada sin verificar. La documentación oficial confirma la forma set <servicio>
+    address=<red>, que admite varias redes separadas por comas, los nombres y puertos
+    de los servicios, y que la restricción rechaza la conexión al servicio sin
+    filtrar a nivel de red; también recomienda el firewall para redes externas o no
+    confiables, que no es el caso de la red interna de un switch de acceso. Se
+    eligió esta opción porque no puede cortar otro tráfico. No se confirmaron: la
+    forma disable y enable con varios servicios, vaciar address con comillas, que
+    MAC-WinBox no se vea afectado ni la configuración del servidor MAC. Falta probar
+    la guía en un equipo real.

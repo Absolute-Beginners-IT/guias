@@ -1,0 +1,139 @@
+platform: aruba-aoscx
+task: poe-port
+summary: >-
+  Corta y restablece la alimentación PoE de un puerto de un Aruba CX 6100 con PoE
+  para reiniciar el equipo conectado, y fija la prioridad PoE del puerto.
+risk:
+  level: medium
+  reason: >-
+    El equipo conectado al puerto se apaga en el momento. No afecta al resto del
+    switch ni a los datos de otros puertos.
+params:
+  - id: interfaceId
+    label: Puerto
+    type: text
+    example: 1/1/12
+    pattern: '^\d+/\d+/\d+$'
+    patternHint: Formato miembro/slot/puerto, por ejemplo 1/1/12.
+  - id: priority
+    label: Prioridad PoE que debe quedar
+    type: choice
+    example: low
+    options:
+      - low
+      - high
+      - critical
+    help: La de fábrica es low. Reserva critical para lo que no puede apagarse, como un punto de acceso principal.
+  - id: previousPriority
+    label: Prioridad PoE que tiene ahora
+    type: choice
+    example: low
+    options:
+      - low
+      - high
+      - critical
+    help: La ves en la comprobación previa; hace falta para poder volver atrás.
+preflight:
+  - text: >-
+      Mira el estado PoE del puerto: si entrega potencia, cuánta y con qué
+      prioridad. Anota la prioridad actual. Si PoE aparece deshabilitado en el
+      puerto, detente: está desactivado a propósito y esta guía lo dejaría
+      entregando potencia.
+    command: show power-over-ethernet {{interfaceId}} brief
+  - text: Comprueba la potencia disponible del switch; si queda poca, el equipo puede no volver a encender.
+    command: show power-over-ethernet
+  - text: Confirma qué equipo está en ese puerto y avisa a quien lo use.
+steps:
+  - title: Entrar en la configuración del puerto
+    commands:
+      - config
+      - interface {{interfaceId}}
+    explanation: Entra en el contexto del puerto. El prompt queda en switch(config-if)#.
+  - title: Cortar la alimentación PoE
+    commands:
+      - no power-over-ethernet
+    explanation: >-
+      Deshabilita la entrega de potencia en el puerto. El equipo conectado se apaga.
+      El enlace de datos del puerto no se deshabilita.
+    warning: >-
+      El equipo se apaga al ejecutar este comando. Si el switch tiene Quick PoE
+      activado, no permite deshabilitar PoE en un puerto suelto.
+  - title: Esperar unos segundos
+    manual: true
+    explanation: Espera unos 10 segundos para que el equipo se descargue por completo antes de volver a alimentarlo.
+  - title: Restablecer la alimentación PoE
+    commands:
+      - power-over-ethernet
+    explanation: Vuelve a habilitar la entrega de potencia. El equipo arranca de nuevo.
+  - title: Fijar la prioridad
+    commands:
+      - power-over-ethernet priority {{priority}}
+    explanation: >-
+      Define qué prioridad tiene el puerto cuando el switch no tiene potencia para
+      todos: los puertos de prioridad más baja son los primeros en quedarse sin
+      alimentación.
+    breakdown:
+      - token: power-over-ethernet priority
+        meaning: Fija la prioridad PoE del puerto.
+      - token: '{{priority}}'
+        meaning: critical es la más alta, después high y low. El valor de fábrica es low.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve al modo Manager.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: Copia la configuración en ejecución a la de arranque, para que la prioridad sobreviva a un reinicio.
+    warning: Verifica primero (sección siguiente) y guarda después.
+verification:
+  - command: show power-over-ethernet {{interfaceId}} brief
+    expect: >-
+      En la fila del puerto, PoE habilitado (Yes), prioridad {{priority}} y, cuando
+      el equipo termina de arrancar, potencia entregada mayor que cero.
+  - command: show interface {{interfaceId}}
+    expect: El puerto vuelve a estar up cuando el equipo termina de arrancar.
+rollback:
+  summary: >-
+    El corte de alimentación no se puede deshacer, solo restablecer. La prioridad sí
+    vuelve a su valor anterior.
+  steps:
+    - title: Asegurar que el puerto vuelve a entregar potencia
+      commands:
+        - config
+        - interface {{interfaceId}}
+        - power-over-ethernet
+        - end
+      explanation: Habilita PoE en el puerto por si quedó deshabilitado a mitad del procedimiento.
+    - title: Volver a la prioridad anterior
+      commands:
+        - config
+        - interface {{interfaceId}}
+        - power-over-ethernet priority {{previousPriority}}
+        - end
+      explanation: Devuelve al puerto la prioridad {{previousPriority}}.
+    - title: Si ya habías guardado con write memory
+      commands:
+        - write memory
+      explanation: Guarda de nuevo para que la configuración de arranque también quede como antes.
+  lockoutRecovery: >-
+    Este cambio no afecta al acceso de gestión del switch, salvo que el equipo
+    alimentado por ese puerto sea parte de tu camino hasta él (por ejemplo un punto
+    de acceso o un conversor). En ese caso hazlo desde una conexión cableada.
+sources:
+  - title: AOS-CX 10.15 Monitoring Guide (4100i, 6000, 6100) — power-over-ethernet
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/monitoring_4100i-6000-6100/Content/Chp_PoE/PoE_cmds/pow-ove-eth-cmd.htm
+  - title: AOS-CX 10.15 Monitoring Guide — power-over-ethernet priority
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/monitoring_4100i-6000-6100/Content/Chp_PoE/PoE_cmds/pow-ove-eth-pri.htm
+  - title: AOS-CX 10.15 Monitoring Guide — show power-over-ethernet
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/monitoring_4100i-6000-6100/Content/Chp_PoE/PoE_cmds/sho-pow-ove-eth.htm
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: AOS-CX 10.15
+  notes: >-
+    Los comandos están contrastados con la documentación oficial. Usar no
+    power-over-ethernet seguido de power-over-ethernet para reiniciar un equipo es
+    una secuencia deducida de lo que hace cada comando, no un procedimiento descrito
+    por el fabricante, y el tiempo de espera es orientativo. Falta probarla en un
+    6100 con PoE.

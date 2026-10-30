@@ -1,0 +1,93 @@
+platform: aruba-aoscx
+task: user-admin
+summary: >-
+  Crea en un Aruba CX 6100 un usuario local del grupo administrators. El switch pide
+  la contraseña en pantalla, sin mostrarla.
+risk:
+  level: medium
+  reason: >-
+    Añade una cuenta con control total del switch. No afecta al tráfico ni a las
+    cuentas existentes, pero una contraseña débil compromete el equipo.
+params:
+  - id: userName
+    label: Nombre del usuario
+    type: text
+    example: jconde
+    pattern: '^(?!(admin|root|remote_user)$)[A-Za-z][A-Za-z0-9._-]{0,31}$'
+    patternHint: Empieza por letra; hasta 32 caracteres; letras, números, punto, guion y guion bajo. No puede ser admin, root ni remote_user.
+    help: Distingue mayúsculas de minúsculas.
+preflight:
+  - text: Mira qué usuarios existen ya y a qué grupo pertenecen.
+    command: show user-list
+  - text: >-
+      Ten la contraseña decidida y guardada en el gestor de contraseñas: hasta 32
+      caracteres ASCII imprimibles, sin espacios.
+  - text: No cierres tu sesión actual hasta comprobar que la cuenta nueva entra.
+steps:
+  - title: Entrar en modo configuración
+    commands:
+      - config
+    explanation: Pasa a configuración global. El prompt cambia a switch(config)#.
+  - title: Crear el usuario
+    commands:
+      - user {{userName}} group administrators password
+    explanation: >-
+      Crea el usuario {{userName}} en el grupo administrators. Al terminar en
+      password sin nada detrás, el switch pide la contraseña dos veces y la oculta
+      con asteriscos.
+    warning: No añadas la contraseña al final del comando; quedaría a la vista en pantalla y en el historial.
+    breakdown:
+      - token: user {{userName}}
+        meaning: Nombre de la cuenta nueva.
+      - token: group administrators
+        meaning: Grupo con todos los privilegios. Los otros grupos de fábrica son operators (solo consulta) y auditors (solo auditoría).
+      - token: password
+        meaning: Sin valor detrás, hace que el switch pida la contraseña de forma interactiva.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve al modo Manager.
+  - title: Probar la cuenta nueva
+    manual: true
+    explanation: >-
+      Sin cerrar esta sesión, abre otra y entra con {{userName}}. Comprueba que
+      llegas al prompt terminado en # y que puedes ejecutar config.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: Copia la configuración en ejecución a la de arranque.
+    warning: Guarda solo después de comprobar que la cuenta nueva entra.
+verification:
+  - command: show user-list
+    expect: Una fila con el usuario {{userName}} y el grupo administrators.
+rollback:
+  summary: Borra la cuenta creada. La cuenta admin de fábrica no se puede borrar.
+  steps:
+    - title: Borrar el usuario
+      commands:
+        - config
+        - no user {{userName}}
+        - end
+      explanation: Elimina la cuenta {{userName}}. Hazlo desde otra cuenta; el switch no deja borrar la cuenta con la que estás conectado.
+    - title: Si ya habías guardado con write memory
+      commands:
+        - write memory
+      explanation: Guarda de nuevo para que la configuración de arranque también quede sin la cuenta.
+  lockoutRecovery: >-
+    Crear una cuenta no quita el acceso a las existentes. Si no recuerdas ninguna
+    contraseña de administrador, la recuperación se hace por consola desde el sistema
+    de servicio del switch, y está fuera de esta guía.
+sources:
+  - title: AOS-CX 10.15 Security Guide (4100i, 6000, 6100) — user
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/security_4100i-6000-6100/Content/Chp_Mng_Use/User_grp_cmds/use-10.htm
+  - title: AOS-CX 10.15 Security Guide — show user-list
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/security_4100i-6000-6100/Content/Chp_Mng_Use/User_grp_cmds/sho-use-lis-10.htm
+  - title: AOS-CX 10.15 Security Guide — grupos de usuarios de fábrica
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/security_4100i-6000-6100/Content/Chp_Mng_Use/bui-in-use-gro-the-pri-10.htm
+  - title: AOS-CX 10.15 Security Guide — requisitos de las contraseñas
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/security_4100i-6000-6100/Content/Chp_Mng_Use/pas-req-10.htm
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: AOS-CX 10.15
+  notes: Sintaxis contrastada con la documentación oficial; falta probarla en un 6100 real.

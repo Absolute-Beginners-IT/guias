@@ -1,0 +1,76 @@
+platform: mikrotik-routeros
+task: user-admin
+summary: >-
+  Crea en un MikroTik con RouterOS un usuario del grupo full. La contraseña se
+  escribe a mano al final del comando, antes de pulsar Enter.
+risk:
+  level: medium
+  reason: >-
+    Añade una cuenta con control total del equipo y RouterOS la guarda en el
+    momento. Si el comando se ejecuta sin contraseña, la cuenta queda creada con la
+    contraseña en blanco.
+params:
+  - id: userName
+    label: Nombre del usuario
+    type: text
+    example: jconde
+    pattern: '^[A-Za-z0-9]([A-Za-z0-9_.@#-]{0,30}[A-Za-z0-9])?$'
+    patternHint: Empieza y termina por letra o número; puede llevar punto, guion, guion bajo, arroba y almohadilla.
+preflight:
+  - text: Mira qué usuarios existen ya, de qué grupo son y desde qué direcciones pueden entrar.
+    command: /user print
+  - text: Ten la contraseña decidida y guardada en el gestor de contraseñas.
+  - text: Asegúrate de que nadie ve tu pantalla; no cierres tu sesión actual hasta comprobar que la cuenta nueva entra.
+steps:
+  - title: Crear el usuario
+    commands:
+      - /user add name={{userName}} group=full password=
+    explanation: >-
+      Pega el comando y, sin pulsar Enter todavía, escribe la contraseña justo
+      después de password=. Crea la cuenta {{userName}} en el grupo full, que tiene
+      todos los permisos.
+    warning: >-
+      No pulses Enter sin escribir la contraseña: la cuenta se crearía con la
+      contraseña en blanco. Si pasa, bórrala de inmediato con la vuelta atrás.
+    breakdown:
+      - token: /user add
+        meaning: Da de alta un usuario del equipo.
+      - token: name={{userName}}
+        meaning: Nombre de la cuenta.
+      - token: group=full
+        meaning: Grupo con todos los permisos. Los otros de fábrica son write y read; incluso read permite reiniciar y ver datos sensibles.
+      - token: password=
+        meaning: Contraseña de la cuenta; se escribe a mano a continuación del signo igual.
+  - title: Probar la cuenta nueva
+    manual: true
+    explanation: >-
+      Sin cerrar esta sesión, abre otra y entra con {{userName}}. Comprueba que
+      puedes ejecutar un comando de configuración, por ejemplo /user print.
+verification:
+  - command: /user print
+    expect: Una fila con el nombre {{userName}} y el grupo full, sin la marca X de deshabilitado.
+rollback:
+  summary: Borra la cuenta creada. RouterOS no deja borrar el último usuario con acceso total.
+  steps:
+    - title: Borrar el usuario
+      commands:
+        - /user remove {{userName}}
+      explanation: Elimina la cuenta {{userName}}. Hazlo desde otra cuenta del grupo full.
+  lockoutRecovery: >-
+    Crear una cuenta no quita el acceso a las existentes. Si creaste la cuenta sin
+    contraseña por error, bórrala de inmediato desde tu sesión actual.
+sources:
+  - title: RouterOS — First Time Configuration (alta y baja de usuarios)
+    url: https://help.mikrotik.com/docs/display/ROS/First+Time+Configuration
+  - title: RouterOS — User (grupos, propiedades y reglas de nombres)
+    url: https://help.mikrotik.com/docs/display/ROS/User
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: RouterOS 7
+  notes: >-
+    Los comandos user add y user remove están contrastados con la documentación
+    oficial. La documentación menciona el comando /password, que cambia de forma
+    interactiva la contraseña de la cuenta con la que estás conectado, pero no
+    describe una forma de crear otro usuario sin escribir la contraseña en el
+    comando. Falta probar la guía en un equipo real.

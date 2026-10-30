@@ -1,0 +1,81 @@
+platform: aruba-aoscx
+task: ntp-client
+summary: >-
+  Configura un servidor de tiempo en un Aruba CX 6100 y activa el cliente NTP, que
+  viene desactivado de fábrica.
+risk:
+  level: low
+  reason: Sincronizar la hora no afecta al tráfico ni al acceso de gestión.
+params:
+  - id: ntpServer
+    label: Servidor de tiempo
+    type: text
+    example: 192.168.10.5
+    pattern: '^[A-Za-z0-9.-]{1,253}$'
+    patternHint: Una IP o un nombre de equipo, sin espacios.
+    help: Si usas un nombre, el switch necesita tener configurado un servidor DNS.
+preflight:
+  - text: Mira la hora y la fecha que tiene ahora el switch.
+    command: show clock
+  - text: Mira si ya hay servidores de tiempo configurados.
+    command: show ntp associations
+steps:
+  - title: Entrar en modo configuración
+    commands:
+      - config
+    explanation: Pasa a configuración global. El prompt cambia a switch(config)#.
+  - title: Definir el servidor de tiempo
+    commands:
+      - ntp server {{ntpServer}} iburst
+    explanation: >-
+      Añade {{ntpServer}} como servidor de tiempo. Se pueden definir hasta ocho; por
+      defecto usa NTP versión 4 y la VRF por defecto.
+    breakdown:
+      - token: ntp server {{ntpServer}}
+        meaning: Servidor de tiempo, por IP o por nombre.
+      - token: iburst
+        meaning: Envía varias consultas seguidas al arrancar para sincronizar antes.
+  - title: Activar el cliente NTP
+    commands:
+      - ntp enable
+    explanation: Activa el cliente NTP, que de fábrica está desactivado. Sin este paso el servidor configurado no se usa.
+  - title: Salir y guardar
+    commands:
+      - end
+      - write memory
+    explanation: Vuelve al modo Manager y guarda la configuración.
+verification:
+  - command: show ntp associations
+    expect: >-
+      {{ntpServer}} aparece con un asterisco delante, que indica el servidor que se
+      está usando. Puede tardar unos minutos en aparecer.
+  - command: show clock
+    expect: La hora y la fecha son las correctas.
+rollback:
+  summary: Quita el servidor añadido y, si antes no se usaba NTP, desactiva el cliente.
+  steps:
+    - title: Quitar el servidor y desactivar el cliente
+      commands:
+        - config
+        - no ntp server {{ntpServer}}
+        - no ntp enable
+        - end
+        - write memory
+      explanation: Elimina el servidor de tiempo y vuelve a dejar el cliente NTP desactivado.
+  lockoutRecovery: Este cambio no afecta al acceso de gestión.
+sources:
+  - title: AOS-CX 10.15 Fundamentals Guide (4100i, 6000, 6100) — poner en hora el switch con NTP
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_IniCfg/set-swi-tim-usi-ntp-cli.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — ntp server
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_IniCfg/NTP_cmds/ntp-ser.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — ntp enable
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_IniCfg/NTP_cmds/ntp-ena-10.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — show ntp associations
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_IniCfg/NTP_cmds/sho-ntp-ass.htm
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: AOS-CX 10.15
+  notes: >-
+    Sintaxis contrastada con la documentación oficial. La guía no cubre la zona
+    horaria porque no se contrastó su comando. Falta probarla en un 6100 real.

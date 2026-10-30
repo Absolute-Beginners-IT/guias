@@ -1,0 +1,94 @@
+platform: ruijie-reyee
+task: snmp-monitoring
+summary: >-
+  Activa SNMPv3 con autenticación y cifrado (authPriv) en un Ruijie NBS3200 desde su
+  interfaz web, con un grupo y un usuario de solo lectura.
+risk:
+  level: medium
+  reason: >-
+    No afecta al tráfico, pero el agente SNMP expone el estado del switch. La guía
+    oficial no describe cómo limitar SNMP a la IP del servidor de monitorización, así
+    que la protección descansa en las claves del usuario.
+params:
+  - id: snmpUser
+    label: Usuario SNMPv3
+    type: text
+    example: MonitorRO1
+    pattern: '^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])[A-Za-z0-9_-]{8,32}$'
+    patternHint: De 8 a 32 caracteres, con mayúsculas, minúsculas y números; sin espacios.
+    help: El switch exige al menos 8 caracteres de 3 tipos distintos; no admite admin, public ni private.
+  - id: groupName
+    label: Grupo SNMPv3
+    type: text
+    example: monitor-ro
+    pattern: '^[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres; letras, números, guion y guion bajo.
+  - id: location
+    label: Ubicación del switch
+    type: text
+    example: Sede-Central-Rack2
+    pattern: '^[A-Za-z0-9_.-]{1,64}$'
+    patternHint: Sin espacios; letras, números, punto, guion y guion bajo.
+  - id: contact
+    label: Contacto
+    type: text
+    example: sistemas
+    pattern: '^[A-Za-z0-9_.@-]{1,64}$'
+    patternHint: Sin espacios; letras, números, punto, guion, guion bajo y arroba.
+preflight:
+  - text: >-
+      Ten preparadas en el gestor de contraseñas dos claves distintas, una de
+      autenticación y otra de cifrado, de 8 a 31 caracteres con al menos tres tipos de
+      carácter, sin espacios ni signo de interrogación.
+steps:
+  - title: Activar SNMP en versión 3
+    manual: true
+    explanation: >-
+      Ve a Local Device > System > SNMP > Global Config, activa SNMP Service y
+      confirma con OK. La primera vez se activa v3. Deja la versión en v3, escribe la
+      ubicación {{location}} y el contacto {{contact}}, y pulsa Save.
+  - title: Crear el grupo de solo lectura
+    manual: true
+    explanation: >-
+      Ve a Local Device > System > SNMP > View/Group/Community/Client Access Control
+      y pulsa Add en la lista de grupos SNMP v3. Nombre {{groupName}}, nivel de
+      seguridad con autenticación y cifrado, vista de solo lectura all y vista de
+      lectura y escritura none. Pulsa OK.
+  - title: Crear el usuario escribiendo las claves a mano
+    manual: true
+    explanation: >-
+      En la misma página, pulsa Add en la lista de clientes SNMP v3. Usuario
+      {{snmpUser}}, grupo {{groupName}}, nivel con autenticación y cifrado,
+      protocolo de autenticación SHA (o SHA256 si tu herramienta lo admite) con tu
+      clave de autenticación, y cifrado AES con tu clave de cifrado. Pulsa OK.
+    warning: Este manual no genera las claves porque son secretos. No elijas MD5 ni DES.
+  - title: Probar desde el servidor de monitorización
+    manual: true
+    explanation: >-
+      En la herramienta de monitorización configura SNMPv3 con el usuario
+      {{snmpUser}}, nivel authPriv, el mismo protocolo de autenticación y AES, con las
+      mismas claves, y comprueba que el switch responde.
+verification:
+  - expect: >-
+      En Global Config, SNMP Service está activo en v3 con la ubicación y el contacto
+      configurados. En Access Control aparecen el grupo {{groupName}} y el usuario
+      {{snmpUser}} con autenticación y cifrado.
+rollback:
+  summary: Apaga el servicio SNMP; el grupo y el usuario pueden quedarse, porque sin el servicio no se usan.
+  steps:
+    - title: Apagar SNMP
+      manual: true
+      explanation: En Local Device > System > SNMP > Global Config, desactiva SNMP Service y pulsa Save.
+  lockoutRecovery: Este cambio no afecta al acceso de gestión por la interfaz web.
+sources:
+  - title: Ruijie Reyee NBS3200 V2 — ReyeeOS 2.341 Configuration Guide, apartado Configuring SNMP
+    url: https://reyee.ruijie.com/en-global/support/documents/slide_rg-nbs3200-24gt4xs-p-v2-nbs3200-48gt4xs-p-v2-switches-implementation-cookbook/
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: ReyeeOS 2.341
+  notes: >-
+    Pasos, campos y requisitos de nombres y claves contrastados con la guía oficial.
+    La guía no describe una lista de IP permitidas para SNMP en este modelo; si la
+    necesitas, valora una ACL de la sección de seguridad. Falta probarla en un
+    NBS3200 real.

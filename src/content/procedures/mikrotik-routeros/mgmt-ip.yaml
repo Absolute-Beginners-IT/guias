@@ -1,0 +1,137 @@
+platform: mikrotik-routeros
+task: mgmt-ip
+summary: >-
+  Añade una IP fija de gestión y una ruta por defecto a un MikroTik con RouterOS.
+  La dirección anterior no se toca, así que se puede comprobar la nueva sin perder
+  el acceso.
+risk:
+  level: high
+  reason: >-
+    RouterOS guarda cada cambio sin paso de confirmación. Una dirección duplicada o
+    una segunda ruta por defecto afectan a la red en el momento, y quitar después
+    la dirección antigua corta las sesiones que la usan.
+params:
+  - id: interfaceName
+    label: Interfaz de gestión
+    type: text
+    example: bridge1
+    pattern: '^[A-Za-z0-9_.+-]{1,32}$'
+    patternHint: Nombre de la interfaz, sin espacios.
+    help: El bridge, o la interfaz VLAN de gestión creada sobre él. Nunca un puerto físico que sea miembro del bridge.
+  - id: ipCidr
+    label: IP de gestión con prefijo
+    type: cidr
+    example: 192.168.10.22/24
+  - id: gateway
+    label: Puerta de enlace
+    type: ipv4
+    example: 192.168.10.1
+    help: Tiene que estar en la misma red que la IP de gestión.
+  - id: backupName
+    label: Nombre de la copia de respaldo
+    type: text
+    example: crs317-antes-ip-gestion
+    pattern: '^(flash/)?[A-Za-z0-9_-]{1,40}$'
+    patternHint: Hasta 40 caracteres; letras, números, guion y guion bajo, sin extensión. Puede empezar por flash/.
+preflight:
+  - text: >-
+      Mira las direcciones actuales y en qué interfaz están. Con detail se ve la
+      interfaz real de cada una. La dirección de fábrica es 192.168.88.1/24.
+    command: /ip address print detail
+  - text: >-
+      Mira si ya existe una ruta por defecto (destino 0.0.0.0/0). Si existe y es
+      correcta, no ejecutes el paso que añade otra.
+    command: /ip route print
+  - text: Guarda una copia completa de la configuración.
+    command: /system backup save name={{backupName}}
+  - text: Comprueba desde otro equipo que la IP nueva no responde a ping, para no duplicarla.
+steps:
+  - title: Activar Safe Mode
+    manual: true
+    explanation: >-
+      Pulsa Ctrl+X (o F4). El prompt pasa a mostrar SAFE. Si tu sesión se corta, los
+      cambios se deshacen solos al vencer el tiempo de espera de la conexión.
+  - title: Añadir la IP de gestión
+    commands:
+      - /ip address add address={{ipCidr}} interface={{interfaceName}}
+    explanation: >-
+      Añade la dirección {{ipCidr}} a {{interfaceName}}. La dirección anterior sigue
+      activa, así que tu sesión no se corta.
+    breakdown:
+      - token: /ip address add
+        meaning: Añade una dirección; no sustituye las que ya existen.
+      - token: address={{ipCidr}}
+        meaning: Dirección IPv4 con la longitud de la máscara en bits.
+      - token: interface={{interfaceName}}
+        meaning: Interfaz donde vive la dirección. En un equipo con bridge va en el bridge o en una interfaz VLAN, no en un puerto físico miembro.
+  - title: Añadir la ruta por defecto
+    commands:
+      - /ip route add gateway={{gateway}}
+    explanation: >-
+      Añade la ruta por defecto hacia {{gateway}}. Al no indicar destino, RouterOS
+      usa 0.0.0.0/0.
+    warning: Salta este paso si ya existe una ruta por defecto correcta; una segunda ruta reparte o desvía el tráfico del propio switch.
+  - title: Comprobar el acceso por la IP nueva
+    manual: true
+    explanation: >-
+      Sin cerrar esta sesión, abre otra hacia la IP de {{ipCidr}} desde tu equipo de
+      administración. Al entrar, RouterOS avisa de que otra sesión tiene Safe Mode y
+      pregunta qué hacer: responde d para dejar todo como está.
+  - title: Salir de Safe Mode conservando el cambio
+    manual: true
+    explanation: >-
+      En la sesión original, pulsa Ctrl+X de nuevo. El cambio queda guardado. Si
+      algo no está bien, pulsa Ctrl+D en su lugar para salir deshaciendo lo hecho.
+  - title: Retirar la dirección antigua cuando ya no haga falta
+    manual: true
+    explanation: >-
+      Cuando todo el mundo use la IP nueva, quita la antigua desde una sesión
+      abierta contra la nueva, en el menú /ip address. Hazlo en otro momento y con
+      Safe Mode: las sesiones abiertas contra la dirección antigua se cortan.
+verification:
+  - command: /ip address print
+    expect: Aparece {{ipCidr}} en la interfaz {{interfaceName}}, sin la marca I (inválida) ni X (deshabilitada).
+  - command: /ip route print
+    expect: Hay una única ruta con destino 0.0.0.0/0 hacia {{gateway}}, con la marca A (activa).
+  - command: /ping {{gateway}} count=3
+    expect: La puerta de enlace responde.
+rollback:
+  summary: >-
+    Dentro de Safe Mode, Ctrl+D deshace todo. Fuera de Safe Mode se quitan la
+    dirección y la ruta añadidas.
+  steps:
+    - title: Si sigues en Safe Mode
+      manual: true
+      explanation: Pulsa Ctrl+D. Sale de Safe Mode deshaciendo los cambios hechos en él.
+    - title: Si ya saliste de Safe Mode
+      commands:
+        - /ip address remove [find where address="{{ipCidr}}"]
+        - /ip route remove [find where gateway={{gateway}} dst-address=0.0.0.0/0 static]
+      explanation: >-
+        Quita la dirección y la ruta por defecto añadidas. Hazlo desde una sesión
+        abierta contra la dirección antigua.
+      warning: No quites la ruta si ya existía antes de empezar y decidiste no añadir otra.
+  lockoutRecovery: >-
+    Como la dirección antigua no se toca, el acceso por ella se mantiene. Si aun así
+    lo pierdes con Safe Mode activo, espera unos 9 minutos a que los cambios se
+    deshagan. Si no, conéctate por consola o carga la copia guardada antes de
+    empezar.
+sources:
+  - title: RouterOS — First Time Configuration
+    url: https://help.mikrotik.com/docs/display/ROS/First+Time+Configuration
+  - title: RouterOS — IP Addressing
+    url: https://help.mikrotik.com/docs/display/ROS/IP+Addressing
+  - title: RouterOS — IP Routing
+    url: https://help.mikrotik.com/docs/display/ROS/IP+Routing
+  - title: RouterOS — Configuration Management (Safe Mode)
+    url: https://help.mikrotik.com/docs/display/ROS/Configuration+Management
+status:
+  level: unverified
+  reviewed: '2026-10-13'
+  firmware: RouterOS 7
+  notes: >-
+    Marcada sin verificar porque los comandos de vuelta atrás no están confirmados.
+    Añadir la dirección y la ruta por defecto, las consultas print y el aviso de
+    Safe Mode al entrar otra sesión sí están contrastados con la documentación
+    oficial. No aparecen en las páginas consultadas las formas de remove con find
+    ni el comando ping con count. Falta probar la guía en un equipo real.

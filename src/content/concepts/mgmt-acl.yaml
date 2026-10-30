@@ -1,0 +1,24 @@
+id: mgmt-acl
+title: Limitar el acceso de gestión con una ACL
+group: security-resilience
+order: 4
+summary: >-
+  Permite entrar a la gestión del switch (SSH o web) solo desde la red de
+  administración, con una lista de control de acceso.
+explanation: >-
+  Una lista de control de acceso (ACL) es una lista ordenada de reglas que permiten o
+  deniegan tráfico según su origen, destino y protocolo. El switch las lee de arriba
+  abajo y aplica la primera que coincide; al final de casi todas hay una denegación
+  implícita de todo lo demás. Aplicada a la gestión, una ACL hace que la contraseña
+  deje de ser la única barrera: aunque alguien la conozca, no puede ni intentar entrar
+  si no está en la red de administración. La misma técnica sirve para filtrar tráfico
+  entre equipos, pero en un switch de acceso su uso más útil es proteger la gestión.
+risks:
+  - Si la red desde la que trabajas no está en la lista, al aplicarla pierdes el acceso de gestión.
+  - La denegación implícita del final bloquea todo lo que no esté permitido, incluido el tráfico que no tenías en cuenta.
+  - Si la ACL filtra también el tráfico que atraviesa el switch y no solo el de gestión, puede cortar servicios de los usuarios.
+  - Una regla mal ordenada no hace lo que parece, porque gana la primera que coincide.
+prerequisites:
+  - Conocer la red de administración desde la que se gestionan los switches.
+  - Tener acceso por consola o una forma de deshacer el cambio sola, como un temporizador de vuelta atrás.
+  - Tener una copia de la configuración hecha antes de empezar.

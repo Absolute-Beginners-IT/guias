@@ -1,0 +1,91 @@
+platform: cisco-c1300
+task: user-admin
+summary: >-
+  Crea en un Cisco Catalyst 1300 un usuario local con privilegio 15. El switch no
+  pide la contraseña en pantalla: hay que escribirla a mano dentro del comando.
+risk:
+  level: medium
+  reason: >-
+    Añade una cuenta con control total del switch, y la contraseña queda visible en
+    pantalla mientras se escribe. No afecta al tráfico ni a las cuentas existentes.
+params:
+  - id: userName
+    label: Nombre del usuario
+    type: text
+    example: jconde
+    pattern: '^[A-Za-z][A-Za-z0-9._-]{0,19}$'
+    patternHint: Empieza por letra; hasta 20 caracteres; letras, números, punto, guion y guion bajo.
+preflight:
+  - text: Mira qué usuarios existen ya y con qué nivel de privilegio.
+    command: show users accounts
+  - text: >-
+      Ten la contraseña decidida y guardada en el gestor de contraseñas. Con los
+      valores de fábrica necesita al menos 8 caracteres de 3 clases distintas
+      (mayúsculas, minúsculas, números, símbolos), sin repetir un carácter más de 3
+      veces seguidas, y no puede contener el nombre del usuario.
+  - text: Asegúrate de que nadie ve tu pantalla; no cierres tu sesión actual hasta comprobar que la cuenta nueva entra.
+steps:
+  - title: Entrar en modo configuración
+    commands:
+      - configure terminal
+    explanation: Pasa de Privileged EXEC a configuración global. El prompt termina en (config)#.
+  - title: Crear el usuario escribiendo el comando a mano
+    manual: true
+    explanation: >-
+      Escribe el comando username {{userName}} seguido del nivel de privilegio 15 y
+      de la contraseña. Antes de pulsar Enter, escribe username {{userName}} ? para
+      que el switch te muestre el orden exacto de las palabras privilege y password
+      en tu versión de firmware. El nivel 15 es el de administrador; si no se
+      indica, la cuenta queda en nivel 1, de solo consulta.
+    warning: >-
+      Este manual no genera este comando porque incluye la contraseña. No lo copies
+      a ningún documento ni lo dejes en un portapapeles compartido.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve a Privileged EXEC.
+  - title: Probar la cuenta nueva
+    manual: true
+    explanation: >-
+      Sin cerrar esta sesión, abre otra y entra con {{userName}}. Comprueba que
+      llegas al prompt terminado en # y que puedes ejecutar configure terminal.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: >-
+      Copia la configuración en ejecución a la de arranque. La contraseña se guarda
+      cifrada. El switch pide confirmación.
+    warning: Guarda solo después de comprobar que la cuenta nueva entra.
+verification:
+  - command: show users accounts
+    expect: Una fila con el usuario {{userName}} y privilegio 15.
+rollback:
+  summary: Borra la cuenta creada. El switch no deja borrar el último usuario de privilegio 15.
+  steps:
+    - title: Borrar el usuario
+      commands:
+        - configure terminal
+        - no username {{userName}}
+        - end
+      explanation: Elimina la cuenta {{userName}}. Hazlo desde otra cuenta de privilegio 15.
+    - title: Si ya habías guardado con write memory
+      commands:
+        - write memory
+      explanation: Guarda de nuevo para que la configuración de arranque también quede sin la cuenta.
+  lockoutRecovery: >-
+    Crear una cuenta no quita el acceso a las existentes. Si todavía no guardaste y
+    algo salió mal, un reinicio arranca con la configuración de arranque anterior.
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — AAA Commands (username, passwords complexity, show users accounts)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/aaa_commands.html
+status:
+  level: unverified
+  reviewed: '2026-10-13'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: >-
+    Marcada sin verificar. La guía oficial confirma que username admite privilege,
+    password y borrado con no username, la longitud de nombre y contraseña y las
+    reglas de complejidad, pero su línea de sintaxis está mal maquetada y no deja
+    claro el orden de privilege y password; por eso el comando se escribe a mano
+    consultando la ayuda del propio switch. La guía menciona también una variante
+    generate-password, en la que el switch propone una contraseña, que no se probó.

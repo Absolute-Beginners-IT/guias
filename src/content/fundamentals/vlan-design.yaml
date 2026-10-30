@@ -1,0 +1,60 @@
+id: vlan-design
+title: Diseñar las VLAN por propósito
+order: 7
+summary: >-
+  Cómo decidir qué VLAN necesita tu empresa, qué número y qué red darle a cada una,
+  y por qué la de gestión merece un trato aparte. Es la base del planificador de red.
+sections:
+  - heading: Una VLAN por tipo de tráfico
+    paragraphs:
+      - >-
+        Una VLAN agrupa equipos que deben verse entre sí y separarlos de los demás,
+        aunque compartan los mismos switches. La pregunta para diseñarlas no es dónde
+        está cada equipo, sino qué es y con quién tiene que hablar.
+      - >-
+        Separar el tráfico limita el alcance de un problema: un portátil infectado en
+        la red de invitados no llega a los servidores, y una tormenta de difusión en
+        las cámaras no tumba la telefonía.
+    points:
+      - 'Usuarios: los ordenadores de los puestos de trabajo.'
+      - 'Voz: los teléfonos IP, que necesitan prioridad y suelen ir en su propia VLAN.'
+      - 'Servidores: los equipos que dan servicio al resto.'
+      - 'Invitados: el wifi para visitas, con salida a Internet y sin acceso a nada interno.'
+      - 'Cámaras y dispositivos IoT: equipos que no se actualizan a menudo y conviene aislar.'
+      - 'Gestión: la red por la que administras los switches y demás equipos de red.'
+  - heading: Números y redes fáciles de recordar
+    paragraphs:
+      - >-
+        Elige un esquema y mantenlo en todos los switches. Una costumbre muy útil es que
+        el número de la VLAN coincida con el tercer octeto de su red: la VLAN 20 usa
+        192.168.20.0/24. Así, al ver una IP sabes en qué VLAN está.
+    points:
+      - Deja huecos entre números (10, 20, 30) para poder añadir VLAN parecidas después.
+      - Evita la VLAN 1 para el tráfico de usuarios; es la que traen todos los puertos de fábrica.
+      - Usa nombres cortos, sin espacios ni tildes, porque algunos switches no los aceptan.
+  - heading: La VLAN de gestión
+    paragraphs:
+      - >-
+        Es la más importante y la más pequeña. Si alguien entra en ella puede cambiar la
+        configuración de toda la red, así que solo deberían estar los equipos de red y
+        los ordenadores de quien los administra.
+      - >-
+        Tiene que llegar a todos los switches por los enlaces entre ellos. Cuando cambias
+        la IP de gestión de un switch a esa VLAN, el enlace por el que estás conectado ya
+        tiene que llevarla; si no, pierdes el acceso. Por eso el planificador configura
+        primero las VLAN y los enlaces y deja la IP de gestión para después.
+  - heading: Lo que las VLAN no hacen solas
+    paragraphs:
+      - >-
+        Los switches de este manual separan las VLAN, pero no deciden qué tráfico puede
+        pasar de una a otra. Eso lo hace el router o el cortafuegos, que necesita una
+        interfaz en cada VLAN y sus reglas. También es ahí donde suele estar el DHCP de
+        cada red.
+    points:
+      - Apunta en el plan la red de cada VLAN; la necesitarás al configurar el router.
+      - Decide qué VLAN pueden hablar entre sí antes de crear las reglas del cortafuegos.
+related:
+  - vlan-create
+  - port-access
+  - port-trunk
+  - mgmt-ip

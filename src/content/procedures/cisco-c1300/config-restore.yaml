@@ -1,0 +1,108 @@
+platform: cisco-c1300
+task: config-restore
+summary: >-
+  Instala como configuración de arranque de un Cisco Catalyst 1300 un archivo
+  guardado en un servidor TFTP y reinicia el switch para que arranque con ella.
+risk:
+  level: high
+  reason: >-
+    El switch se reinicia, así que todo el tráfico que pasa por él se corta durante
+    el arranque, y la configuración de arranque anterior se borra.
+params:
+  - id: serverIp
+    label: IP del servidor TFTP
+    type: ipv4
+    example: 192.168.10.50
+  - id: fileName
+    label: Archivo a restaurar
+    type: text
+    example: c1300-antes-vlan-20.txt
+    pattern: '^[A-Za-z0-9._-]{1,60}$'
+    patternHint: Hasta 60 caracteres; letras, números, punto, guion y guion bajo, sin espacios.
+    help: Tiene que ser un archivo de texto con comandos de la CLI de este switch.
+  - id: currentFileName
+    label: Nombre para guardar el estado actual
+    type: text
+    example: c1300-antes-de-restaurar.txt
+    pattern: '^[A-Za-z0-9._-]{1,60}$'
+    patternHint: Hasta 60 caracteres; letras, números, punto, guion y guion bajo, sin espacios.
+    help: Copia del estado de ahora, para poder volver si la restauración no era lo que querías.
+preflight:
+  - text: Guarda en el servidor el estado actual, aunque esté mal, para poder volver a él.
+    command: copy running-config tftp://{{serverIp}}/{{currentFileName}}
+  - text: >-
+      Ten acceso por consola y hazlo en una ventana de mantenimiento: el switch se
+      reinicia.
+  - text: >-
+      No uses copy desde el servidor hacia running-config para restaurar: ese
+      comando añade el contenido del archivo a la configuración actual, no la
+      sustituye, y deja lo que el archivo no menciona.
+steps:
+  - title: Instalar el archivo como configuración de arranque
+    commands:
+      - boot config tftp://{{serverIp}}/{{fileName}}
+    explanation: >-
+      Descarga el archivo, lo convierte al formato interno y lo instala como
+      configuración de arranque. La configuración de arranque anterior se borra. La
+      configuración en ejecución todavía no cambia.
+    warning: Desde este paso, el próximo reinicio arranca con el archivo restaurado.
+    breakdown:
+      - token: boot config
+        meaning: Instala un archivo de comandos como configuración de arranque.
+      - token: tftp://{{serverIp}}/{{fileName}}
+        meaning: Origen; servidor TFTP y archivo que se va a instalar.
+  - title: Reiniciar el switch
+    commands:
+      - reload
+    explanation: >-
+      Reinicia el equipo para que arranque con la configuración instalada. Pide
+      confirmación antes de cortar la sesión.
+    warning: Al confirmar se corta el tráfico del switch hasta que termina de arrancar.
+  - title: Esperar el reinicio y volver a entrar
+    manual: true
+    explanation: >-
+      Conéctate de nuevo cuando el equipo termine de arrancar. La IP de gestión y
+      los usuarios son ahora los del archivo restaurado.
+verification:
+  - command: show running-config
+    expect: La configuración coincide con la del archivo {{fileName}}.
+  - command: show vlan
+    expect: Las VLAN y sus puertos son los que esperabas después de restaurar.
+rollback:
+  summary: >-
+    La vuelta atrás es instalar el archivo del estado que guardaste antes de
+    empezar y reiniciar otra vez.
+  steps:
+    - title: Volver al estado anterior a la restauración
+      commands:
+        - boot config tftp://{{serverIp}}/{{currentFileName}}
+        - reload
+      explanation: Instala la copia hecha en Antes de empezar y reinicia el equipo.
+      warning: Vuelve a cortar el tráfico durante el arranque.
+    - title: 'Alternativa: última configuración estable'
+      commands:
+        - boot config mirror-config
+        - reload
+      explanation: >-
+        Instala la configuración espejo que el switch guarda por su cuenta: la
+        última configuración de arranque que estuvo 24 horas sin cambios. Sirve si
+        el servidor TFTP no está disponible.
+  lockoutRecovery: >-
+    Si después del reinicio no puedes entrar por red, comprueba primero que estás
+    usando la IP y el usuario del archivo restaurado. Si aun así no hay acceso,
+    conéctate por el puerto de consola e instala desde ahí la configuración espejo
+    o la copia del estado anterior.
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — File System Commands (boot config, copy, mirror-config)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/file-system-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — System Management Commands (reload)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/system-management-commands.html
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: >-
+    boot config, reload y mirror-config están contrastados con la guía oficial. El
+    ejemplo de boot config con TFTP de la guía tiene una dirección mal escrita, así
+    que esta forma exacta hay que confirmarla en un equipo de laboratorio antes de
+    usarla en producción.

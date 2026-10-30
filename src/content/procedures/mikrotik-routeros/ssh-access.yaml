@@ -1,0 +1,104 @@
+platform: mikrotik-routeros
+task: ssh-access
+summary: >-
+  Deja activo el servicio SSH de un MikroTik con RouterOS, lo limita a la red de
+  administración y desactiva Telnet y FTP.
+risk:
+  level: high
+  reason: >-
+    Limitar SSH a una red en la que no está tu equipo te deja fuera en el momento,
+    y RouterOS guarda cada cambio sin paso de confirmación.
+params:
+  - id: mgmtNetwork
+    label: Red de administración permitida
+    type: cidr
+    example: 192.168.10.0/24
+    help: Red desde la que se podrá entrar por SSH. Tu equipo tiene que estar dentro.
+preflight:
+  - text: >-
+      Mira qué servicios están activos, en qué puerto y desde qué direcciones. La
+      marca X indica un servicio desactivado.
+    command: /ip service print
+  - text: >-
+      Comprueba por qué servicio estás conectado ahora. Esta guía no toca WinBox ni
+      la web; si entras por Telnet, cambia antes a SSH o WinBox.
+  - text: Confirma que la IP de tu equipo de administración está dentro de la red que vas a permitir.
+steps:
+  - title: Activar Safe Mode
+    manual: true
+    explanation: >-
+      Pulsa Ctrl+X (o F4). El prompt pasa a mostrar SAFE. Si tu sesión se corta, los
+      cambios se deshacen solos al vencer el tiempo de espera de la conexión.
+  - title: Asegurar que SSH está activo
+    commands:
+      - /ip service enable ssh
+    explanation: Activa el servicio SSH. Si ya lo estaba, no cambia nada.
+  - title: Limitar SSH a la red de administración
+    commands:
+      - /ip service set ssh address={{mgmtNetwork}}
+    explanation: >-
+      Hace que el servicio SSH solo acepte conexiones desde {{mgmtNetwork}}. Las
+      demás se rechazan.
+    warning: Si tu equipo no está en esa red y estás conectado por SSH, pierdes el acceso en este paso.
+    breakdown:
+      - token: /ip service set ssh
+        meaning: Modifica las propiedades del servicio SSH.
+      - token: address={{mgmtNetwork}}
+        meaning: Redes desde las que se permite el servicio. Vacío significa cualquier origen.
+  - title: Desactivar Telnet y FTP
+    commands:
+      - /ip service disable telnet,ftp
+    explanation: Apaga los dos servicios que envían usuario y contraseña sin cifrar.
+    warning: Si estás conectado por Telnet, la sesión se corta.
+  - title: Probar el acceso por SSH
+    manual: true
+    explanation: >-
+      Sin cerrar esta sesión, abre otra por SSH desde tu equipo de administración.
+      RouterOS avisa de que otra sesión tiene Safe Mode: responde d para dejar todo
+      como está.
+  - title: Salir de Safe Mode conservando el cambio
+    manual: true
+    explanation: >-
+      En la sesión original, pulsa Ctrl+X de nuevo. El cambio queda guardado. Si
+      algo no está bien, pulsa Ctrl+D en su lugar para salir deshaciendo lo hecho.
+verification:
+  - command: /ip service print
+    expect: >-
+      ssh aparece sin la marca X, en el puerto 22 y con {{mgmtNetwork}} en la
+      columna ADDRESS; telnet y ftp aparecen con la marca X.
+rollback:
+  summary: >-
+    Dentro de Safe Mode, Ctrl+D deshace todo. Fuera de Safe Mode se reactivan los
+    servicios y se quita la restricción.
+  steps:
+    - title: Si sigues en Safe Mode
+      manual: true
+      explanation: Pulsa Ctrl+D. Sale de Safe Mode deshaciendo los cambios hechos en él.
+    - title: Si ya saliste de Safe Mode
+      commands:
+        - /ip service set ssh address=""
+        - /ip service enable telnet,ftp
+      explanation: >-
+        Quita la restricción de origen de SSH y vuelve a activar Telnet y FTP.
+        Reactiva esos dos solo si de verdad hacen falta.
+  lockoutRecovery: >-
+    Si la sesión se corta con Safe Mode activo, espera unos 9 minutos: los cambios
+    se deshacen solos. Si ya habías salido de Safe Mode, entra por WinBox o por
+    consola y corrige la red permitida.
+sources:
+  - title: RouterOS — Services
+    url: https://help.mikrotik.com/docs/display/ROS/Services
+  - title: RouterOS — First Time Configuration (desactivar servicios y limitar por dirección)
+    url: https://help.mikrotik.com/docs/display/ROS/First+Time+Configuration
+  - title: RouterOS — Configuration Management (Safe Mode)
+    url: https://help.mikrotik.com/docs/display/ROS/Configuration+Management
+status:
+  level: unverified
+  reviewed: '2026-10-13'
+  firmware: RouterOS 7
+  notes: >-
+    Marcada sin verificar. Limitar un servicio con set address y desactivar varios
+    con disable están contrastados con la documentación oficial. No aparecen en las
+    páginas consultadas, y hay que confirmarlos en un equipo: la forma enable para
+    activar un servicio y vaciar address con comillas en la vuelta atrás. Falta
+    probar la guía en un equipo real.

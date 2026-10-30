@@ -1,0 +1,97 @@
+platform: ruijie-reyee
+task: stp-edge-protection
+summary: >-
+  Activa Spanning Tree en modo RSTP en un Ruijie NBS3200 desde su interfaz web y deja
+  un puerto de acceso con Port Fast y BPDU Guard.
+risk:
+  level: medium
+  reason: >-
+    Spanning Tree viene apagado de fábrica. Al activarlo, los puertos tardan unos 30
+    segundos en volver a reenviar tráfico, así que todo el switch se corta ese rato.
+    Además, con Spanning Tree activo la configuración de ERPS deja de funcionar.
+params:
+  - id: port
+    label: Puerto de acceso
+    type: text
+    example: Gi14
+    pattern: '^[A-Za-z]{2}\d{1,2}$'
+    patternHint: Nombre del puerto tal como aparece en el panel, por ejemplo Gi14.
+    help: Un puerto con un solo equipo final, nunca un enlace hacia otro switch.
+preflight:
+  - text: >-
+      En Local Device > Advanced > STP > STP Settings, mira si STP ya está activo y en
+      qué modo. Si está activo, no cambies el modo: esta guía solo toca el puerto.
+  - text: >-
+      Si el switch forma parte de un anillo ERPS, detente: activar Spanning Tree deja
+      sin efecto la configuración de ERPS.
+  - text: >-
+      Si STP está apagado, haz el cambio en una ventana de mantenimiento: al activarlo
+      todos los puertos se cortan unos 30 segundos.
+  - text: Comprueba que en {{port}} hay un solo equipo final y no otro switch.
+steps:
+  - title: Activar Spanning Tree en modo RSTP
+    manual: true
+    explanation: >-
+      Ve a Local Device > Advanced > STP > STP Settings. Si STP está apagado, pulsa
+      el interruptor para activarlo y confirma con OK. Deja STP Mode en RSTP, el valor
+      de fábrica, y pulsa Save. Si ya estaba activo, sáltate este paso.
+    warning: >-
+      Activar STP o cambiar su modo abre una sesión nueva; no recargues la página
+      mientras se aplica. Los puertos tardan unos 30 segundos en volver a reenviar.
+  - title: Marcar el puerto como borde con BPDU Guard
+    manual: true
+    explanation: >-
+      En la misma página, en Port List, pulsa Edit en la fila de {{port}}. Activa Port
+      Fast y BPDU Guard y pulsa OK. Para varios puertos de usuario a la vez está Batch
+      Edit.
+    warning: No lo hagas en un puerto que vaya a otro switch ni en tu vía de gestión.
+  - title: Saber reactivar el puerto si BPDU Guard lo apaga
+    manual: true
+    explanation: >-
+      Si por {{port}} llegan BPDU, el switch lo deja en estado Error-disabled. Primero
+      desconecta el equipo que los envía. La guía no explica cómo sacar el puerto de
+      ese estado; lo más parecido que documenta es apagarlo y encenderlo en Local
+      Device > Ports > Port Settings > Basic Settings: Edit en {{port}}, Status
+      desactivado y OK, y luego Status activado y OK. Si sigue en Error-disabled,
+      reinicia el switch desde Local Device > System > Reboot.
+verification:
+  - expect: >-
+      En STP Settings, STP aparece activo en modo RSTP, con un Root Bridge ID que
+      coincide con el switch que esperas como raíz de la red.
+  - expect: >-
+      En Port List, {{port}} tiene Port Fast y BPDU Guard activos, y con el equipo
+      conectado su estado es Forwarding.
+rollback:
+  summary: >-
+    Quita Port Fast y BPDU Guard del puerto. Apaga Spanning Tree solo si lo activaste
+    tú y el switch no tiene enlaces redundantes.
+  steps:
+    - title: Quitar la protección del puerto
+      manual: true
+      explanation: >-
+        En Local Device > Advanced > STP > STP Settings, en Port List, pulsa Edit en
+        {{port}}, desactiva Port Fast y BPDU Guard y pulsa OK.
+    - title: Apagar Spanning Tree si lo activaste en este cambio
+      manual: true
+      explanation: >-
+        En la misma página, desactiva el interruptor de STP y confirma. Si hay dos
+        caminos hacia otro switch, no lo apagues: se forma un bucle.
+  lockoutRecovery: >-
+    Si al activar STP perdiste la página, espera un minuto a que los puertos vuelvan a
+    Forwarding y vuelve a entrar. Si tu vía de gestión quedó en Error-disabled, entra
+    por otro puerto de la VLAN de gestión. Si no hay forma, el botón Reset mantenido
+    más de 5 segundos devuelve el switch a fábrica.
+sources:
+  - title: Ruijie Reyee NBS3200 V2 — ReyeeOS 2.341 Configuration Guide, apartado STP (STP Global Settings y Applying STP to a Port)
+    url: https://reyee.ruijie.com/en-global/support/documents/slide_rg-nbs3200-24gt4xs-p-v2-nbs3200-48gt4xs-p-v2-switches-implementation-cookbook/
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: ReyeeOS 2.341
+  notes: >-
+    Menús, valores de fábrica, Port Fast y BPDU Guard contrastados con la guía
+    oficial. La guía dice que el puerto pasa a Error-disabled, pero no documenta cómo
+    recuperarlo ni una recuperación automática para BPDU Guard; el apagado y encendido
+    del puerto es la opción documentada más cercana, sin confirmar. Como alternativa
+    contra bucles, la guía ofrece RLDP (Local Device > Advanced > RLDP), que sí tiene
+    recuperación automática. Falta probarlo en un NBS3200 real.

@@ -1,0 +1,53 @@
+platform: ruijie-reyee
+task: ntp-client
+summary: >-
+  Ajusta la zona horaria de un Ruijie NBS3200 y le añade el servidor de tiempo de la
+  empresa, desde la interfaz web.
+risk:
+  level: low
+  reason: Sincronizar la hora no afecta al tráfico ni al acceso de gestión.
+params:
+  - id: ntpServer
+    label: Servidor de tiempo
+    type: text
+    example: 192.168.10.5
+    pattern: '^[A-Za-z0-9.-]{1,253}$'
+    patternHint: Una IP o un nombre de equipo, sin espacios.
+preflight:
+  - text: >-
+      De fábrica el switch trae varios servidores de tiempo públicos. Si no tiene
+      salida a internet, no le sirven y la hora queda mal.
+steps:
+  - title: Abrir la hora del sistema
+    manual: true
+    explanation: Ve a Local Device > System > System Time.
+  - title: Comprobar la zona horaria
+    manual: true
+    explanation: Si la hora mostrada no es la local, elige la zona horaria correcta.
+  - title: Añadir el servidor de tiempo
+    manual: true
+    explanation: >-
+      En la lista de servidores NTP, añade {{ntpServer}} y guarda. Puedes borrar los
+      servidores públicos si el switch no tiene salida a internet.
+verification:
+  - expect: >-
+      En System Time, la hora actual coincide con la de tu equipo. En Local Device >
+      Home > Basic Info, la hora del sistema también es la correcta.
+rollback:
+  summary: Quita el servidor añadido.
+  steps:
+    - title: Quitar el servidor de tiempo
+      manual: true
+      explanation: En Local Device > System > System Time, borra {{ntpServer}} de la lista y guarda.
+  lockoutRecovery: Este cambio no afecta al acceso de gestión.
+sources:
+  - title: Ruijie Reyee NBS3200 V2 — ReyeeOS 2.341 Configuration Guide, apartado Setting the System Time
+    url: https://reyee.ruijie.com/en-global/support/documents/slide_rg-nbs3200-24gt4xs-p-v2-nbs3200-48gt4xs-p-v2-switches-implementation-cookbook/
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: ReyeeOS 2.341
+  notes: >-
+    Pasos contrastados con la guía oficial, que describe la zona horaria, la lista
+    de servidores NTP y la edición manual de la hora, pero no los nombres exactos de
+    los botones de la lista. Falta probarla en un NBS3200 real.

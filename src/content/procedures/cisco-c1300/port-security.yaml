@@ -1,0 +1,178 @@
+platform: cisco-c1300
+task: port-security
+summary: >-
+  Limita cuántas direcciones MAC puede aprender un puerto de acceso de un Cisco
+  Catalyst 1300 y define qué hace el switch con un equipo de más: descartar su
+  tráfico o apagar el puerto.
+risk:
+  level: medium
+  reason: >-
+    Solo afecta a un puerto, pero un máximo demasiado bajo deja sin red a equipos
+    legítimos, y con la acción de apagado el puerto queda fuera de servicio hasta
+    que alguien lo reactive.
+params:
+  - id: interfaceId
+    label: Puerto de acceso
+    type: text
+    example: gi1/0/10
+    pattern: '^(gi|te|tw|fi)\d+/0/\d+$'
+    patternHint: Tipo y número en formato unidad/0/puerto, por ejemplo gi1/0/10.
+    help: Un puerto con equipos finales, nunca un enlace a otro switch o a un punto de acceso.
+  - id: maxMacs
+    label: Máximo de direcciones MAC
+    type: number
+    min: 1
+    max: 256
+    example: '2'
+    help: Cuenta todos los equipos del puerto, por ejemplo el teléfono IP y el ordenador conectado detrás.
+  - id: violationAction
+    label: Acción ante un equipo de más
+    type: choice
+    example: discard
+    options:
+      - discard
+      - discard-shutdown
+    help: discard descarta el tráfico del equipo de más; discard-shutdown además apaga el puerto.
+preflight:
+  - text: >-
+      Mira cuántas direcciones MAC hay ahora en el puerto. El máximo tiene que
+      cubrir a todos los equipos legítimos.
+    command: show mac address-table interface {{interfaceId}}
+  - text: >-
+      Mira el estado de port security del puerto. Tiene que estar en Disabled: los
+      comandos de este manual solo se aceptan con el puerto en modo normal, sin
+      límite.
+    command: show ports security {{interfaceId}}
+  - text: >-
+      Guarda la configuración actual del puerto. Si tiene 802.1X activo, port
+      security no se puede activar.
+    command: show running-config interface {{interfaceId}}
+steps:
+  - title: Entrar en la configuración del puerto
+    commands:
+      - configure terminal
+      - interface {{interfaceId}}
+    explanation: Pasa a configuración global y entra en el puerto. El prompt termina en (config-if)#.
+  - title: Elegir el modo de aprendizaje con límite
+    commands:
+      - port security mode max-addresses
+    explanation: >-
+      Define cómo aprende el puerto cuando se active la protección: sigue
+      aprendiendo direcciones de forma dinámica, pero solo hasta el máximo. De
+      fábrica el modo es lock, que no aprende ninguna dirección nueva.
+    breakdown:
+      - token: port security mode
+        meaning: Modo de aprendizaje de la protección.
+      - token: max-addresses
+        meaning: >-
+          Aprendizaje dinámico con límite. Las otras opciones son lock (no aprende
+          más) y secure permanent o secure delete-on-reset (guarda las direcciones
+          como seguras).
+  - title: Fijar el máximo de direcciones
+    commands:
+      - port security max {{maxMacs}}
+    explanation: Número de direcciones que el puerto puede aprender. De fábrica es 1.
+    breakdown:
+      - token: port security max
+        meaning: Máximo de direcciones del puerto, de 0 a 256.
+      - token: '{{maxMacs}}'
+        meaning: Cuántos equipos pueden funcionar a la vez en este puerto.
+  - title: Activar la protección con su acción
+    commands:
+      - port security {{violationAction}}
+    explanation: >-
+      Activa port security en el puerto con el modo y el máximo anteriores, y
+      define qué hacer con las tramas de un equipo cuya dirección ya no cabe.
+      Se hace al final porque el modo y el máximo solo se pueden cambiar con la
+      protección apagada.
+    warning: >-
+      Al activarla se borran las direcciones que el puerto había aprendido, y los
+      equipos tienen que volver a aprenderse. Con discard-shutdown, un equipo de
+      más apaga el puerto entero, incluidos los legítimos.
+    breakdown:
+      - token: port security
+        meaning: Activa la protección. Admite además trap y unos segundos para enviar avisos SNMP.
+      - token: '{{violationAction}}'
+        meaning: >-
+          discard descarta el tráfico del equipo de más (es la acción de fábrica);
+          discard-shutdown además apaga el puerto. Existe también forward, que deja
+          pasar el tráfico sin aprender la dirección.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve a Privileged EXEC.
+  - title: Comprobar que los equipos del puerto funcionan
+    manual: true
+    explanation: >-
+      Confirma que todos los equipos legítimos del puerto {{interfaceId}} tienen
+      red y haz las comprobaciones de la sección Verificación.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: >-
+      Copia la configuración en ejecución a la de arranque. El switch pide
+      confirmación antes de sobrescribirla.
+verification:
+  - command: show ports security {{interfaceId}}
+    expect: >-
+      Status Enabled, Learning Max-Addresses, la acción elegida en Action y
+      {{maxMacs}} en Maximum.
+  - command: show ports security addresses {{interfaceId}}
+    expect: La columna Current no supera {{maxMacs}}.
+  - command: show errdisable interfaces {{interfaceId}}
+    expect: El puerto no aparece apagado por el sistema.
+rollback:
+  summary: >-
+    Desactiva la protección y devuelve el modo y el máximo a sus valores de fábrica.
+    Si el puerto se apagó por un equipo de más, primero quita ese equipo y después
+    reactívalo.
+  steps:
+    - title: Reactivar un puerto apagado por port security
+      commands:
+        - show errdisable interfaces {{interfaceId}}
+        - errdisable recovery reset interface {{interfaceId}}
+      explanation: >-
+        La primera orden muestra si el puerto está apagado y por qué (port-security).
+        La segunda lo vuelve a activar. Antes, desconecta el equipo de más, o se
+        volverá a apagar.
+      warning: >-
+        La reactivación automática por esta causa está desactivada de fábrica. Se
+        puede activar con errdisable recovery cause port-security, y el switch
+        reactiva el puerto pasados 300 segundos.
+    - title: Quitar port security del puerto
+      commands:
+        - configure terminal
+        - interface {{interfaceId}}
+        - no port security
+        - no port security max
+        - no port security mode
+        - end
+      explanation: >-
+        Primero desactiva la protección, que convierte las direcciones seguras en
+        dinámicas, y después devuelve el máximo y el modo a sus valores de fábrica,
+        que solo se pueden cambiar con la protección apagada.
+    - title: Si ya habías guardado con write memory
+      commands:
+        - write memory
+      explanation: Guarda de nuevo para que la vuelta atrás sobreviva a un reinicio.
+  lockoutRecovery: >-
+    Este cambio no afecta a la gestión salvo que lo apliques al puerto por el que
+    estás conectado. Si ese puerto se apagó o descarta tu tráfico, entra por consola
+    o por otro puerto y quita port security del puerto.
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — Address Table Commands (port security)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/address-table-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — Ethernet Configuration Commands (errdisable)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/ethernet-configuration-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — File System Commands (write memory)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/file-system-commands.html
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: >-
+    Sintaxis contrastada con la guía oficial de la CLI. La guía escribe el modo
+    como max-addresses en la sintaxis y como max en un ejemplo; aquí se usa la
+    forma completa. Que discard-shutdown deje el puerto en el estado de error
+    port-security que reactiva errdisable recovery reset se deduce de la lista de
+    causas de ese comando. Falta probarla en un C1300 real.

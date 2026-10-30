@@ -1,0 +1,59 @@
+platform: ruijie-reyee
+task: vlan-create
+summary: >-
+  Crea una VLAN con descripción en un Ruijie NBS3200 desde su interfaz web. No toca
+  ningún puerto.
+risk:
+  level: low
+  reason: >-
+    Dar de alta una VLAN no afecta a los puertos ni al tráfico existente. En el modo
+    de red autoorganizada, la VLAN puede propagarse a otros equipos Reyee.
+params:
+  - id: vlanId
+    label: ID de la VLAN
+    type: vlan-id
+    example: '20'
+  - id: vlanName
+    label: Descripción de la VLAN
+    type: text
+    example: VOZ
+    pattern: '^[A-Za-z0-9_-]{1,32}$'
+    patternHint: Sin espacios; letras, números, guion y guion bajo.
+    help: Tiene que ser única en el switch.
+preflight:
+  - text: >-
+      En Local Device > VLAN > VLAN List, comprueba que la VLAN {{vlanId}} no existe
+      ya.
+steps:
+  - title: Abrir la lista de VLAN
+    manual: true
+    explanation: Ve a Local Device > VLAN > VLAN List.
+  - title: Añadir la VLAN
+    manual: true
+    explanation: >-
+      Pulsa Add, escribe el ID {{vlanId}} y la descripción {{vlanName}}, y pulsa OK.
+      Para crear varias de una vez está Batch Add, con IDs separados por comas o
+      rangos con guion.
+verification:
+  - expect: La VLAN {{vlanId}} aparece en VLAN List con la descripción {{vlanName}}.
+rollback:
+  summary: Borra la VLAN creada.
+  steps:
+    - title: Borrar la VLAN
+      manual: true
+      explanation: >-
+        En VLAN List, pulsa Delete en la fila de la VLAN {{vlanId}}. No se pueden
+        borrar la VLAN 1 ni las que estén en uso como VLAN de gestión, nativa o de
+        acceso; para esas el botón aparece en gris.
+  lockoutRecovery: Crear una VLAN no corta el acceso de gestión.
+sources:
+  - title: Ruijie Reyee NBS3200 V2 — ReyeeOS 2.341 Configuration Guide, apartado Configuring a VLAN
+    url: https://reyee.ruijie.com/en-global/support/documents/slide_rg-nbs3200-24gt4xs-p-v2-nbs3200-48gt4xs-p-v2-switches-implementation-cookbook/
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: ReyeeOS 2.341
+  notes: >-
+    Pasos contrastados con la guía oficial. La guía no indica qué caracteres admite
+    la descripción; esta guía los limita a un conjunto seguro. Falta probarla en un
+    NBS3200 real.

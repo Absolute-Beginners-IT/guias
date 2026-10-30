@@ -1,0 +1,40 @@
+platform: ruijie-reyee
+task: lldp-neighbors
+summary: >-
+  Muestra qué equipo hay al otro lado de cada puerto de un Ruijie NBS3200 con LLDP,
+  desde la interfaz web.
+risk:
+  level: low
+  reason: Consultar vecinos no cambia nada; LLDP viene activado de fábrica.
+params: []
+preflight:
+  - text: LLDP viene activado de fábrica. Esta guía solo consulta.
+steps:
+  - title: Ver los vecinos
+    manual: true
+    explanation: >-
+      Ve a Local Device > Advanced > LLDP > LLDP Info. Aparece la información LLDP
+      del switch y de los vecinos de cada puerto; pulsa el nombre de un puerto para
+      ver el detalle de su vecino.
+  - title: 'Si la lista sale vacía: comprobar que LLDP está activo'
+    manual: true
+    explanation: >-
+      En Local Device > Advanced > LLDP > LLDP Settings, comprueba que LLDP está
+      activado. En LLDP Management se ve, por puerto, si envía y recibe LLDPDU.
+verification:
+  - expect: Aparecen los switches, teléfonos y puntos de acceso conectados, cada uno en su puerto.
+rollback:
+  summary: Consultar no cambia nada y no requiere vuelta atrás.
+  steps:
+    - title: Nada que deshacer
+      manual: true
+      explanation: Esta guía no modifica la configuración.
+  lockoutRecovery: Esta guía no afecta al acceso de gestión.
+sources:
+  - title: Ruijie Reyee NBS3200 V2 — ReyeeOS 2.341 Configuration Guide, apartado LLDP
+    url: https://reyee.ruijie.com/en-global/support/documents/slide_rg-nbs3200-24gt4xs-p-v2-nbs3200-48gt4xs-p-v2-switches-implementation-cookbook/
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: ReyeeOS 2.341
+  notes: Pasos contrastados con la guía oficial; falta probarlos en un NBS3200 real.

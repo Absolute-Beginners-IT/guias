@@ -1,0 +1,75 @@
+id: cisco-c1300
+vendor: Cisco
+name: Cisco Catalyst 1300
+os: Firmware Catalyst 1300
+models:
+  - C1300-48 con PoE (variante exacta por confirmar en la etiqueta)
+summary: >-
+  Switch gestionable de la línea Catalyst 1300. Su CLI se parece a la de Cisco IOS,
+  pero no es IOS: varios comandos cambian, así que las guías de Catalyst con IOS o
+  IOS-XE no sirven tal cual.
+cliModes:
+  - name: Privileged EXEC
+    prompt: 'switchxxxxxx#'
+    enter: enable
+    description: Consultas (show), copia y guardado de la configuración y reinicio.
+  - name: Configuración global
+    prompt: 'switchxxxxxx(config)#'
+    enter: configure terminal
+    description: Cambios que afectan a todo el switch. Con do delante se puede ejecutar un show sin salir del modo.
+  - name: Base de datos de VLAN
+    prompt: 'switchxxxxxx(config-vlan)#'
+    enter: vlan database
+    description: Alta y baja de VLANs.
+  - name: Configuración de interfaz
+    prompt: 'switchxxxxxx(config-if)#'
+    enter: interface vlan 20
+    description: Ajustes de un puerto, un port-channel o una VLAN. Con exit se sube un nivel y con end se vuelve a Privileged EXEC.
+configPersistence: >-
+  Los cambios se aplican al instante sobre la configuración en ejecución
+  (running-config), pero no sobreviven a un reinicio hasta que se guardan en la
+  configuración de arranque (startup-config) con write memory. El switch pide
+  confirmación antes de sobrescribirla.
+safetyNets:
+  - name: No guardar hasta verificar
+    description: >-
+      Mientras no ejecutes write memory, la configuración de arranque sigue siendo
+      la anterior al cambio. Es la protección básica de esta plataforma.
+    commands:
+      - show running-config
+      - show startup-config
+  - name: Reinicio programado
+    description: >-
+      Antes de un cambio que puede dejarte sin acceso, programa un reinicio. Si
+      pierdes la conexión, el switch se reinicia solo y arranca con la configuración
+      de arranque; si todo sale bien, lo cancelas. El reinicio corta el tráfico.
+    commands:
+      - reload in <minutos>
+      - show reload
+      - reload cancel
+  - name: Configuración espejo (mirror-config)
+    description: >-
+      El switch guarda por su cuenta una copia de la última configuración estable:
+      una configuración de arranque que lleva 24 horas sin cambios. El servicio
+      viene activado de fábrica y la copia se puede instalar como configuración de
+      arranque.
+    commands:
+      - show mirror-configuration service
+      - boot config mirror-config
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — User Interface Commands
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/user-interface-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — File System Commands
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/file-system-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — System Management Commands
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/system-management-commands.html
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: >-
+    Contrastado con la guía oficial de la CLI, que no indica a qué versión de
+    firmware corresponde. La descripción de los modos se leyó en la guía equivalente
+    del C1300X. La guía no afirma de forma literal que un reinicio descarte los
+    cambios sin guardar; es el comportamiento esperado al arrancar con la
+    configuración de arranque. Falta probarlo en un C1300 real.

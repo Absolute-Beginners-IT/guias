@@ -1,0 +1,80 @@
+id: mikrotik-routeros
+vendor: MikroTik
+name: MikroTik CRS317
+os: RouterOS
+models:
+  - CRS317-1G-16S+RM
+summary: >-
+  Switch de 16 puertos SFP+ y un puerto de cobre con sistema operativo RouterOS. La
+  consola no tiene modos como los de Cisco o Aruba: se organiza en menús (por
+  ejemplo /interface bridge) y cada cambio se aplica en el momento.
+cliModes:
+  - name: Menú raíz
+    prompt: '[admin@MikroTik] >'
+    enter: Es donde se llega al iniciar sesión. Desde cualquier menú se vuelve con /.
+    description: Desde aquí se puede ejecutar cualquier comando escribiendo su ruta completa.
+  - name: Menú de trabajo
+    prompt: '[admin@MikroTik] /interface>'
+    enter: Escribiendo la ruta del menú, por ejemplo /interface. Con .. se sube un nivel.
+    description: >-
+      Dentro de un menú se usan los comandos generales print, add, set, remove,
+      enable y disable. Tab completa los comandos; la ayuda es F1 en RouterOS 7 y ?
+      en RouterOS 6.
+  - name: Safe Mode
+    prompt: '[admin@MikroTik] <SAFE>'
+    enter: Ctrl+X o F4. El prompt muestra SAFE mientras está activo.
+    description: Modo protegido en el que los cambios se deshacen solos si se pierde la conexión.
+configPersistence: >-
+  No hay una configuración en ejecución y otra de arranque: cada comando se aplica
+  en el momento y queda guardado, sin un paso equivalente a write memory. La única
+  excepción es Safe Mode, donde la configuración no se guarda en disco hasta salir
+  del modo.
+safetyNets:
+  - name: Safe Mode
+    description: >-
+      Se activa con Ctrl+X o F4 antes de un cambio arriesgado. Si la sesión se
+      corta, los cambios hechos en Safe Mode se deshacen cuando vence el tiempo de
+      espera de la conexión (unos 9 minutos). Ctrl+X otra vez sale conservando los
+      cambios; Ctrl+D sale deshaciéndolos. Solo recuerda hasta 100 acciones: si se
+      supera ese límite, la sesión sale de Safe Mode sin deshacer nada.
+  - name: Deshacer y rehacer
+    description: >-
+      Revierte la última acción de configuración o la vuelve a aplicar. El historial
+      muestra qué acciones se pueden deshacer.
+    commands:
+      - /undo
+      - /redo
+      - /system history print
+  - name: Copia binaria completa
+    description: >-
+      Guarda toda la configuración en un archivo .backup pensado para restaurarse en
+      el mismo equipo y la misma versión de RouterOS. Restaurarla reinicia el switch.
+    commands:
+      - /system backup save name=<nombre>
+      - /system backup load name=<nombre>
+  - name: Exportación en texto
+    description: >-
+      Genera un archivo .rsc legible con los comandos que reproducen la
+      configuración. No incluye las contraseñas de los usuarios del sistema.
+    commands:
+      - /export file=<nombre>
+sources:
+  - title: RouterOS — Configuration Management (Safe Mode, undo, export, import, reset)
+    url: https://help.mikrotik.com/docs/display/ROS/Configuration+Management
+  - title: RouterOS — Backup
+    url: https://help.mikrotik.com/docs/display/ROS/Backup
+  - title: RouterOS — Command Line Interface
+    url: https://help.mikrotik.com/docs/display/ROS/Command+Line+Interface
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: RouterOS 7
+  notes: >-
+    El modelo se apuntó al principio como CRS317-1G-17S+RM; la tabla oficial de
+    MikroTik lo lista como CRS317-1G-16S+RM, sin PoE de salida. Confírmalo en la
+    etiqueta del equipo.
+    Contrastado con la documentación oficial de help.mikrotik.com, que MikroTik ha
+    congelado en favor de un manual nuevo; conviene revisar la versión vigente. Que
+    los cambios se guardan al instante es el comportamiento conocido de RouterOS,
+    pero las páginas consultadas no lo afirman de forma literal. Falta probarlo en
+    un CRS317 real.

@@ -1,0 +1,17 @@
+id: config-backup
+title: Guardar una copia de la configuración
+group: setup-access
+order: 1
+summary: Crea un punto de retorno con la configuración actual antes de hacer cualquier cambio.
+explanation: >-
+  Una copia de la configuración es lo que permite deshacer un cambio que salió mal.
+  Es el primer paso de casi todas las demás guías. Conviene tener dos copias: una
+  dentro del propio switch, para volver atrás rápido, y otra fuera, por si el equipo
+  falla o hay que reemplazarlo.
+risks:
+  - Hacer la copia no altera el funcionamiento del switch.
+  - El archivo contiene información sensible de la red (usuarios, comunidades SNMP, claves); guárdalo en un lugar protegido.
+  - Una copia que solo está dentro del switch se pierde si el equipo se avería.
+prerequisites:
+  - Tener acceso de administrador al switch.
+  - Decidir un nombre que indique el equipo y el momento, por ejemplo antes-vlan-20.

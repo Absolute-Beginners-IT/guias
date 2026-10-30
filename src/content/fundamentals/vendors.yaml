@@ -1,0 +1,55 @@
+id: vendors
+title: Las marcas y sus sistemas
+order: 5
+summary: >-
+  Qué fabricantes de switches vas a encontrar, qué sistema usa cada uno y en qué se
+  parecen y se diferencian las cuatro marcas de este manual.
+sections:
+  - heading: Lo que comparten todas
+    paragraphs:
+      - >-
+        Los conceptos son los mismos en todas las marcas porque siguen los mismos
+        estándares: VLAN 802.1Q, LACP 802.3ad, Spanning Tree 802.1D/w/s, PoE 802.3af/at/bt,
+        LLDP, SNMP, syslog, NTP. Lo que cambia es la forma de pedírselo al switch: los
+        comandos, los menús y cómo se guarda la configuración. Si entiendes el
+        concepto, cambiar de marca es aprender otro vocabulario.
+  - heading: Las marcas de este manual
+    paragraphs:
+      - >-
+        HPE Aruba Networking, con AOS-CX en la serie CX (como el 6100). Línea de
+        comandos parecida a la de Cisco, con checkpoints para volver atrás y gestión
+        opcional desde la nube con Aruba Central. Muy presente en empresas que también
+        usan su wifi.
+      - >-
+        Cisco, el fabricante de referencia del mercado. La serie Catalyst 1300 es su
+        gama de pequeña empresa: su línea de comandos se parece a la del IOS de los
+        Catalyst grandes, pero no es igual, así que no conviene copiar comandos de
+        guías de otros modelos sin comprobarlos.
+      - >-
+        MikroTik, con RouterOS, un mismo sistema para routers y switches. Muy potente y
+        económico, con una sintaxis propia por rutas (/interface bridge port…) y una
+        herramienta gráfica, WinBox. En sus switches CRS las funciones de switch se
+        configuran sobre el bridge y el chip de conmutación.
+      - >-
+        Ruijie, con su gama Reyee para pequeña y mediana empresa. Se gestiona por web
+        y desde Ruijie Cloud, con pocas opciones de línea de comandos. Fácil de poner en
+        marcha; a cambio, algunas funciones avanzadas no están o no se pueden afinar.
+  - heading: Otras marcas que vas a encontrar
+    paragraphs:
+      - >-
+        Juniper (Junos) y Arista en redes grandes y centros de datos; Huawei, Extreme y
+        Dell en empresas de distintos tamaños; Ubiquiti (UniFi), TP-Link (Omada),
+        Netgear y Fortinet (FortiSwitch, gestionado desde su cortafuegos) en pymes, a
+        menudo con un controlador central. Las guías de este manual no las cubren, pero
+        los fundamentos te sirven igual.
+  - heading: Cómo elegir y cómo convivir con varias
+    paragraphs:
+      - >-
+        En una red con varias marcas, lo que más ayuda es hacer las cosas igual en
+        todas: los mismos números de VLAN, la misma VLAN de gestión, nombres de puertos
+        documentados, los mismos servidores de hora, syslog y monitorización. Este
+        manual sigue esa idea: cada tarea tiene la misma estructura en cada marca, y
+        desde cualquier guía puedes saltar a la misma tarea en otra.
+related:
+  - config-backup
+  - snmp-monitoring

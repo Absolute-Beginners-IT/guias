@@ -1,0 +1,95 @@
+platform: cisco-c1300
+task: ssh-access
+summary: >-
+  Activa el servidor SSH de un Cisco Catalyst 1300, que viene desactivado de
+  fábrica, y deja Telnet apagado.
+risk:
+  level: medium
+  reason: >-
+    Activar SSH no corta nada, pero desactivar Telnet corta la sesión si es por
+    donde estás conectado.
+params: []
+preflight:
+  - text: Mira si el servidor SSH ya está activo y qué sesiones hay abiertas.
+    command: show ip ssh
+  - text: >-
+      Comprueba cómo estás conectado ahora. Si es por Telnet, no ejecutes el paso que
+      lo desactiva hasta haber entrado por SSH.
+  - text: No ejecutes write memory hasta haber probado el acceso por SSH.
+steps:
+  - title: Entrar en modo configuración
+    commands:
+      - configure terminal
+    explanation: Pasa de Privileged EXEC a configuración global. El prompt termina en (config)#.
+  - title: Activar el servidor SSH
+    commands:
+      - ip ssh server
+    explanation: >-
+      Activa el servidor SSH en el puerto 22. El switch genera sus claves de cifrado
+      automáticamente.
+    breakdown:
+      - token: ip ssh server
+        meaning: Permite administrar el switch por SSH. La forma con no delante lo desactiva.
+  - title: Probar el acceso por SSH
+    manual: true
+    explanation: >-
+      Sin cerrar esta sesión, abre desde tu equipo una sesión SSH hacia la IP de
+      gestión del switch y entra con tu usuario. Con los valores de fábrica, el
+      switch pide usuario y contraseña dentro de la propia sesión.
+  - title: Desactivar Telnet
+    commands:
+      - no ip telnet server
+    explanation: Deja apagado el servidor Telnet, que envía usuario y contraseña sin cifrar.
+    warning: Si estás conectado por Telnet, la sesión se corta. Ejecútalo solo desde la sesión SSH que acabas de probar o por consola.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve a Privileged EXEC.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: >-
+      Copia la configuración en ejecución a la de arranque. El switch pide
+      confirmación antes de sobrescribirla.
+verification:
+  - command: show ip ssh
+    expect: >-
+      La primera línea dice SSH server enabled. Port: 22, las claves RSA y DSA
+      figuran como generadas, y tu sesión aparece en la lista de sesiones activas.
+rollback:
+  summary: Vuelve a activar Telnet o desactiva SSH según lo que haya fallado.
+  steps:
+    - title: Reactivar Telnet
+      commands:
+        - configure terminal
+        - ip telnet server
+        - end
+      explanation: Vuelve a permitir sesiones Telnet. Úsalo solo como medida temporal.
+    - title: Desactivar SSH
+      commands:
+        - configure terminal
+        - no ip ssh server
+        - end
+      explanation: Apaga el servidor SSH.
+      warning: Si estás conectado por SSH, la sesión se corta. Hazlo solo por consola.
+    - title: Si ya habías guardado con write memory
+      commands:
+        - write memory
+      explanation: Guarda de nuevo para que la configuración de arranque también quede como antes.
+  lockoutRecovery: >-
+    Si te quedaste sin SSH ni Telnet, entra por el puerto de consola y reactiva el
+    servicio. Si todavía no habías guardado, un reinicio arranca con la
+    configuración de arranque anterior.
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — Telnet, SSH and Slogin Commands
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/telnet_ssh-and-slogin-commands.html
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: >-
+    Sintaxis y valores de fábrica contrastados con la guía oficial de la CLI, según
+    la cual SSH y Telnet vienen desactivados. La guía describe además ip ssh
+    password-auth e ip ssh pubkey-auth, que esta guía no toca. Cómo pide el switch
+    las credenciales con esos dos ajustes en su valor de fábrica hay que confirmarlo
+    en un equipo. Falta probarla en un C1300 real.

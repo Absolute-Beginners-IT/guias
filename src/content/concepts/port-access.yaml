@@ -1,0 +1,19 @@
+id: port-access
+title: Asignar un puerto de acceso a una VLAN
+group: vlans-ports
+order: 2
+summary: Deja un puerto en una sola VLAN, sin etiquetas, para conectar un equipo final.
+explanation: >-
+  Un puerto de acceso pertenece a una única VLAN y entrega el tráfico sin etiqueta
+  802.1Q. Es lo que se usa para PCs, impresoras, cámaras o teléfonos: el equipo
+  conectado no sabe nada de VLANs, es el switch el que lo coloca en la suya. Cambiar
+  la VLAN de un puerto mueve al equipo conectado a otra red en el momento.
+risks:
+  - El equipo conectado pierde la conexión con su red anterior en cuanto se aplica el cambio.
+  - Si el puerto es por el que estás gestionando el switch, o es un enlace hacia otro switch, puedes quedarte sin acceso.
+  - Si la VLAN de destino no existe en el switch, el puerto puede quedar sin servicio.
+  - Convertir en acceso un puerto que era trunk corta todas las VLAN que pasaban por él.
+prerequisites:
+  - La VLAN de destino ya está creada en el switch.
+  - Saber qué hay conectado en el puerto y en qué VLAN está ahora.
+  - Tener una copia de la configuración hecha antes de empezar.

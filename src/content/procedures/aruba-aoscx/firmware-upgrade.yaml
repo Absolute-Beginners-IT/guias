@@ -1,0 +1,150 @@
+platform: aruba-aoscx
+task: firmware-upgrade
+summary: >-
+  Descarga una imagen de AOS-CX por TFTP a la imagen de reserva de un Aruba CX 6100,
+  reinicia con ella y conserva la imagen anterior como vuelta atrás.
+risk:
+  level: high
+  reason: >-
+    El switch se reinicia y corta todo el tráfico durante el arranque. Una imagen
+    incorrecta o un corte de luz durante la escritura puede dejarlo sin arrancar con
+    esa imagen.
+params:
+  - id: serverIp
+    label: IP del servidor TFTP
+    type: ipv4
+    example: 192.168.10.50
+  - id: fileName
+    label: Archivo de la imagen
+    type: text
+    example: PL_10_15_1000.swi
+    pattern: '^[A-Za-z0-9._-]{1,80}\.swi$'
+    patternHint: Nombre del archivo .swi, sin espacios ni carpetas.
+    help: La imagen para el 6100 tiene que ser la de su serie; la de otro modelo no sirve.
+  - id: targetImage
+    label: Imagen donde se instala (la que NO está activa)
+    type: choice
+    example: secondary
+    options:
+      - primary
+      - secondary
+    help: Mira Active Image en show images y elige la otra.
+    differentFrom:
+      param: fallbackImage
+      hint: No puede ser la misma que la imagen activa; se sobrescribiría la que está en uso.
+  - id: fallbackImage
+    label: Imagen actual (la que está activa ahora)
+    type: choice
+    example: primary
+    options:
+      - primary
+      - secondary
+    help: Es la que se conserva para volver atrás; no puede ser la misma que la anterior.
+  - id: checkpointName
+    label: Nombre del checkpoint previo
+    type: text
+    example: antes-firmware
+    pattern: '^(?!CPC)[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres; letras, números, guion y guion bajo; no puede empezar por CPC.
+preflight:
+  - text: >-
+      Mira qué versión hay en cada imagen y cuál está activa (Active Image). La
+      nueva va en la otra.
+    command: show images
+  - text: Anota la versión actual.
+    command: show version
+  - text: >-
+      Crea un checkpoint. El fabricante lo pide para poder bajar de versión: la
+      configuración de una versión nueva no es válida en una anterior.
+    command: copy running-config checkpoint {{checkpointName}}
+  - text: Guarda la configuración en ejecución y saca además una copia fuera del switch.
+    command: write memory
+  - text: Lee las notas de la versión y confirma que el salto desde la versión actual está soportado.
+steps:
+  - title: Descargar la imagen a la imagen de reserva
+    commands:
+      - copy tftp://{{serverIp}}/{{fileName}} {{targetImage}}
+    explanation: >-
+      Descarga el archivo y lo escribe en la imagen {{targetImage}}. El switch avisa
+      de que esa imagen se va a borrar y pide confirmación; después muestra el
+      progreso y verifica el firmware. La imagen activa no se toca.
+    warning: Confirma que {{targetImage}} no es la imagen activa. No apagues el switch mientras escribe.
+    breakdown:
+      - token: copy tftp://{{serverIp}}/{{fileName}}
+        meaning: Origen; servidor TFTP y archivo de firmware. También se admite sftp:// con usuario.
+      - token: '{{targetImage}}'
+        meaning: Imagen de destino, primary o secondary. Su contenido anterior se pierde.
+  - title: Comprobar la imagen descargada
+    commands:
+      - show images
+    explanation: >-
+      Confirma que la imagen {{targetImage}} muestra la versión nueva y que su
+      SHA-256 coincide con el publicado por el fabricante.
+  - title: Reiniciar con la imagen nueva
+    commands:
+      - boot system {{targetImage}}
+    explanation: >-
+      Reinicia el switch con la imagen {{targetImage}} y la deja como imagen por
+      defecto para los siguientes arranques. Antes pregunta si quieres guardar la
+      configuración y pide confirmar el reinicio.
+    warning: Al confirmar se corta todo el tráfico del switch hasta que termina de arrancar.
+    breakdown:
+      - token: boot system
+        meaning: Reinicia el switch. Sin nada detrás usa la imagen por defecto.
+      - token: '{{targetImage}}'
+        meaning: Imagen con la que arranca ahora y en adelante.
+  - title: Esperar el arranque y volver a entrar
+    manual: true
+    explanation: >-
+      Conéctate de nuevo cuando el equipo termine de arrancar y haz las
+      comprobaciones de la sección Verificación.
+verification:
+  - command: show version
+    expect: Version muestra la versión nueva y Active Image es {{targetImage}}.
+  - command: show images
+    expect: Default Image es {{targetImage}} y la imagen {{fallbackImage}} conserva la versión anterior.
+  - command: show vlan
+    expect: Las VLAN y sus puertos son los mismos que antes de actualizar.
+rollback:
+  summary: >-
+    La imagen anterior sigue intacta en {{fallbackImage}}. Volver atrás es reiniciar
+    con ella; la configuración se recupera desde el checkpoint previo.
+  steps:
+    - title: Dejar como configuración de arranque la anterior a la actualización
+      commands:
+        - copy checkpoint {{checkpointName}} startup-config
+      explanation: >-
+        Copia el checkpoint creado antes de actualizar a la configuración de
+        arranque, para que la versión anterior arranque con una configuración que
+        entiende. Los cambios hechos después de ese checkpoint se pierden.
+    - title: Reiniciar con la imagen anterior
+      commands:
+        - boot system {{fallbackImage}}
+      explanation: >-
+        Reinicia con la imagen {{fallbackImage}} y la deja como imagen por defecto.
+        Si pregunta si quieres guardar la configuración, responde que no.
+      warning: Vuelve a cortar todo el tráfico durante el arranque.
+  lockoutRecovery: >-
+    Si el switch no arranca bien con la imagen nueva o no puedes entrar por red,
+    conéctate por el puerto de consola y reinicia con la imagen anterior. Si tampoco
+    llega al prompt, el arranque por consola permite elegir imagen o entrar al
+    sistema de servicio; ese caso está fuera de esta guía.
+sources:
+  - title: AOS-CX 10.15 Fundamentals Guide (4100i, 6000, 6100) — copy desde servidor remoto
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/FW_mgt_cmds/cop-rem-url.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — boot system
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/Boot_cmds/boo-sys.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — show images
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/SysHW_cmds/sho-ima-10.htm
+  - title: AOS-CX 10.15 Fundamentals Guide — escenarios de actualización y vuelta a una versión anterior
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/fundamentals_4100i-6000-6100/Content/Chp_Cfg_FW_mgt/upg-dgrd.htm
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: AOS-CX 10.15
+  notes: >-
+    La descarga, show images y boot system están contrastados con la documentación
+    oficial, igual que el procedimiento de bajada de versión con checkpoint. La
+    forma exacta de copy checkpoint a startup-config se tomó del índice de la guía
+    sin leer su página; confírmala con la ayuda del switch. El nombre del archivo de
+    ejemplo es orientativo. Falta probar la guía en un 6100 real.

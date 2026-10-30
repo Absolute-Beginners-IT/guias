@@ -1,0 +1,158 @@
+platform: cisco-c1300
+task: mgmt-ip
+summary: >-
+  Asigna una IP fija y una puerta de enlace a la interfaz de gestión de un Cisco
+  Catalyst 1300, usando un reinicio programado como red de seguridad.
+risk:
+  level: high
+  reason: >-
+    Al asignar una IP fija, el switch suelta la dirección que tenía por DHCP: si
+    estás conectado por red a esa dirección, la sesión se corta. Con datos
+    equivocados el switch queda inalcanzable por red.
+params:
+  - id: vlanId
+    label: VLAN de gestión
+    type: vlan-id
+    example: '1'
+    help: De fábrica la gestión está en la VLAN 1. La VLAN tiene que existir.
+  - id: ipAddress
+    label: IP de gestión
+    type: ipv4
+    example: 192.168.10.21
+  - id: mask
+    label: Máscara de red
+    type: ipv4
+    example: 255.255.255.0
+    help: En formato decimal con puntos.
+  - id: gateway
+    label: Puerta de enlace
+    type: ipv4
+    example: 192.168.10.1
+    help: Tiene que estar en la misma red que la IP de gestión.
+  - id: minutes
+    label: Minutos hasta el reinicio de seguridad
+    type: number
+    min: 5
+    max: 60
+    example: '15'
+    help: Si no logras entrar por la IP nueva, el switch se reinicia pasado este tiempo y arranca con la configuración guardada.
+preflight:
+  - text: >-
+      Mira qué direcciones tiene ahora el switch y de qué tipo son. Sin DHCP ni IP
+      manual, la VLAN por defecto usa 192.168.1.254.
+    command: show ip interface
+  - text: >-
+      Confirma que la configuración de arranque es buena: es a la que vuelve el
+      switch si se reinicia.
+    command: show startup-config
+  - text: Hazlo por el puerto de consola si puedes; así no dependes de la IP que vas a cambiar.
+  - text: Comprueba desde otro equipo que la IP nueva no responde a ping, para no duplicarla.
+steps:
+  - title: Programar el reinicio de seguridad
+    commands:
+      - reload in {{minutes}}
+    explanation: >-
+      Programa un reinicio dentro de {{minutes}} minutos y pide confirmación. Si el
+      cambio te deja sin acceso, el switch se reinicia solo y arranca con la
+      configuración de arranque, que todavía no tiene el cambio.
+    warning: >-
+      Si olvidas cancelarlo, el switch se reinicia y corta todo el tráfico. Si haces
+      el cambio por consola, salta este paso y el de cancelar.
+  - title: Entrar en la interfaz de gestión
+    commands:
+      - configure terminal
+      - interface vlan {{vlanId}}
+    explanation: Entra en la interfaz lógica de la VLAN {{vlanId}}. El prompt termina en (config-if)#.
+  - title: Asignar la IP fija
+    commands:
+      - ip address {{ipAddress}} {{mask}}
+    explanation: >-
+      Define la dirección fija de la interfaz. Al hacerlo, el switch detiene el
+      cliente DHCP de esa interfaz y elimina la dirección que había recibido.
+    warning: Si estás conectado por red a la dirección de DHCP, la sesión se corta en este paso.
+    breakdown:
+      - token: ip address {{ipAddress}}
+        meaning: Dirección IPv4 de gestión.
+      - token: '{{mask}}'
+        meaning: Máscara de red. También se admite una barra y la longitud del prefijo, de 8 a 30.
+  - title: Definir la puerta de enlace
+    commands:
+      - exit
+      - ip default-gateway {{gateway}}
+    explanation: Vuelve a configuración global y define la puerta de enlace por defecto.
+    breakdown:
+      - token: ip default-gateway
+        meaning: Añade una ruta por defecto para que el switch sea alcanzable desde otras redes.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve a Privileged EXEC.
+  - title: Entrar por la IP nueva
+    manual: true
+    explanation: >-
+      Abre una sesión nueva hacia {{ipAddress}} desde tu equipo de administración y
+      haz las comprobaciones de la sección Verificación, antes de que pasen los
+      {{minutes}} minutos.
+  - title: Cancelar el reinicio de seguridad
+    commands:
+      - reload cancel
+    explanation: Cancela el reinicio programado. El switch responde Reload cancelled.
+    warning: No sigas sin ejecutar este paso; comprueba después con show reload que no queda ningún reinicio pendiente.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: >-
+      Copia la configuración en ejecución a la de arranque. El switch pide
+      confirmación antes de sobrescribirla.
+verification:
+  - command: show ip interface vlan {{vlanId}}
+    expect: Aparece la dirección {{ipAddress}} con su máscara, de tipo Static y en estado operativo activo.
+  - command: show reload
+    expect: Después de cancelar, no hay ningún reinicio programado.
+rollback:
+  summary: >-
+    Antes de guardar, la vuelta atrás es dejar que el reinicio de seguridad actúe o
+    reiniciar a mano. Después de guardar hay que rehacer la configuración anterior.
+  steps:
+    - title: Si no pudiste entrar y el reinicio sigue programado
+      manual: true
+      explanation: >-
+        Espera. Al cumplirse el tiempo el switch se reinicia y arranca con la
+        configuración de arranque, con la IP de antes. El reinicio corta el tráfico
+        durante el arranque.
+    - title: Si no programaste el reinicio y todavía no guardaste
+      commands:
+        - reload
+      explanation: Por consola, reinicia el switch para que arranque con la configuración de arranque.
+      warning: El reinicio corta todo el tráfico del switch durante el arranque.
+    - title: Si ya habías guardado
+      commands:
+        - configure terminal
+        - interface vlan {{vlanId}}
+        - ip address dhcp
+        - end
+      explanation: >-
+        Por consola, vuelve a activar el cliente DHCP en la interfaz, lo que elimina
+        las direcciones configuradas a mano. Úsalo solo si antes la IP venía de
+        DHCP; si era otra IP fija, vuelve a configurarla.
+  lockoutRecovery: >-
+    Si no puedes entrar por la IP nueva y el reinicio está programado, espera a que
+    el switch se reinicie y vuelva con la IP anterior. Si no, entra por el puerto de
+    consola y corrige la dirección o la puerta de enlace.
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — IP Addressing Commands
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/ip-addressing-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — System Management Commands (reload)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/system-management-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — File System Commands (write memory)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/file-system-commands.html
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: >-
+    Sintaxis contrastada con la guía oficial de la CLI. La guía indica que la
+    interfaz admite varias direcciones, así que una IP fija anterior no desaparece
+    al añadir otra; quitarla queda fuera de esta guía. El reinicio de seguridad se
+    apoya en que el switch arranca con la configuración de arranque. Falta probarla
+    en un C1300 real.

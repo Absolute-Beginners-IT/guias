@@ -1,0 +1,154 @@
+platform: cisco-c1300
+task: dhcp-snooping
+summary: >-
+  Activa DHCP snooping en una VLAN de un Cisco Catalyst 1300 y marca como confiable
+  solo el puerto por el que llega el servidor DHCP legítimo.
+risk:
+  level: medium
+  reason: >-
+    No corta el tráfico al aplicarlo, pero si el puerto hacia el servidor DHCP no
+    queda como confiable, los equipos de la VLAN se quedan sin dirección al
+    renovarla, y el fallo puede tardar horas en verse.
+params:
+  - id: vlanId
+    label: VLAN a proteger
+    type: vlan-id
+    example: '20'
+    help: La VLAN tiene que existir. Empieza por una sola.
+  - id: trustedPort
+    label: Puerto hacia el servidor DHCP
+    type: text
+    example: gi1/0/48
+    pattern: '^(gi|te|tw|fi)\d+/0/\d+$'
+    patternHint: Tipo y número en formato unidad/0/puerto, por ejemplo gi1/0/48 o te1/0/1.
+    help: >-
+      El puerto por el que llegan las respuestas del servidor DHCP: el que va al
+      servidor o el enlace hacia el switch troncal.
+preflight:
+  - text: Mira si DHCP snooping ya está activo y qué puertos son confiables. De fábrica está apagado.
+    command: show ip dhcp snooping
+  - text: Confirma que la VLAN existe y que el puerto {{trustedPort}} pertenece a ella.
+    command: show vlan
+  - text: >-
+      Confirma por qué puerto llega el servidor DHCP: busca su MAC (o la del router
+      que hace de relay) en la tabla de direcciones de la VLAN.
+    command: show mac address-table vlan {{vlanId}}
+  - text: >-
+      Si hay otro enlace a otro switch por el que también puedan llegar respuestas
+      DHCP, anótalo: tiene que quedar confiable igual que {{trustedPort}}.
+  - text: Ten a mano un equipo de prueba en la VLAN {{vlanId}} para forzar la renovación de su dirección.
+steps:
+  - title: Entrar en modo configuración
+    commands:
+      - configure terminal
+    explanation: Pasa de Privileged EXEC a configuración global. El prompt termina en (config)#.
+  - title: Activar DHCP snooping en el switch
+    commands:
+      - ip dhcp snooping
+    explanation: >-
+      Enciende la función de forma global. Por sí sola no filtra nada: no actúa en
+      ninguna VLAN hasta que se activa en ella.
+  - title: Marcar como confiable el puerto del servidor
+    commands:
+      - interface {{trustedPort}}
+      - ip dhcp snooping trust
+      - exit
+    explanation: >-
+      Por los puertos confiables se aceptan las respuestas de servidor DHCP; por el
+      resto se descartan. De fábrica todos los puertos son no confiables. Se hace
+      antes de activar la VLAN para que no haya un momento sin servidor.
+    warning: >-
+      Si hay más enlaces hacia otros switches o servidores DHCP, repite este paso
+      con cada uno. Nunca marques como confiable un puerto de usuario.
+    breakdown:
+      - token: ip dhcp snooping trust
+        meaning: Marca el puerto como confiable. Con no delante vuelve a ser no confiable.
+  - title: Activar DHCP snooping en la VLAN
+    commands:
+      - ip dhcp snooping vlan {{vlanId}}
+    explanation: >-
+      Desde aquí, en la VLAN {{vlanId}} solo se aceptan respuestas de servidor DHCP
+      que lleguen por puertos confiables, y el switch anota qué IP recibió cada
+      equipo y en qué puerto.
+    breakdown:
+      - token: ip dhcp snooping vlan
+        meaning: Activa la función en una VLAN; exige haberla activado antes de forma global.
+      - token: '{{vlanId}}'
+        meaning: VLAN que se protege.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve a Privileged EXEC.
+  - title: Forzar la renovación en un equipo de prueba
+    manual: true
+    explanation: >-
+      En el equipo de prueba de la VLAN {{vlanId}}, libera y pide de nuevo la
+      dirección (en Windows, ipconfig /release y después ipconfig /renew) y
+      comprueba que recibe una IP correcta.
+    warning: >-
+      Si no recibe dirección, revisa primero que {{trustedPort}} sea confiable. El
+      C1300 no añade la opción 82 de fábrica, así que no debería ser la causa salvo
+      que otro equipo la inserte.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: >-
+      Copia la configuración en ejecución a la de arranque. El switch pide
+      confirmación antes de sobrescribirla.
+verification:
+  - command: show ip dhcp snooping
+    expect: >-
+      Dice DHCP snooping is Enabled, la VLAN {{vlanId}} aparece en la lista de VLAN
+      configuradas y {{trustedPort}} figura con Trusted Yes.
+  - command: show ip dhcp snooping binding vlan {{vlanId}}
+    expect: >-
+      Aparece el equipo de prueba con su MAC, la IP que recibió, el tipo snooping y
+      el puerto donde está conectado.
+rollback:
+  summary: >-
+    Desactiva DHCP snooping en la VLAN, que deja de filtrar en el acto; después
+    quita la marca de confiable y, si no se usa en otra VLAN, la función global.
+  steps:
+    - title: Desactivar DHCP snooping en la VLAN
+      commands:
+        - configure terminal
+        - no ip dhcp snooping vlan {{vlanId}}
+      explanation: Deja de filtrar las respuestas DHCP en la VLAN {{vlanId}}. Es lo primero si los equipos no reciben dirección.
+    - title: Quitar la marca de confiable
+      commands:
+        - interface {{trustedPort}}
+        - no ip dhcp snooping trust
+        - exit
+      explanation: Devuelve el puerto a no confiable, su valor de fábrica.
+    - title: Apagar la función global
+      commands:
+        - no ip dhcp snooping
+        - end
+      explanation: Vuelve al valor de fábrica. Hazlo solo si ninguna otra VLAN usa DHCP snooping.
+    - title: Si ya habías guardado con write memory
+      commands:
+        - write memory
+      explanation: Guarda de nuevo para que la vuelta atrás sobreviva a un reinicio.
+  lockoutRecovery: >-
+    DHCP snooping no filtra el tráfico de gestión, así que no debería dejarte sin
+    acceso salvo que el propio switch tome su IP de gestión por DHCP en esa VLAN. En
+    ese caso entra por consola y desactívalo en la VLAN.
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — DHCP Snooping Commands
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/dhcp-snooping-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — DHCP Relay Commands (opción 82)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/dhcp-relay-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — Address Table Commands (show mac address-table)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/address-table-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — File System Commands (write memory)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/file-system-commands.html
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: >-
+    Sintaxis contrastada con la guía oficial de la CLI. La guía indica que la
+    inserción de la opción 82 está desactivada de fábrica y que los paquetes con
+    opción 82 que llegan por un puerto no confiable se descartan. Que la gestión
+    del switch no pase por el filtro es una deducción, no una afirmación de la
+    guía. Falta probarla en un C1300 real.

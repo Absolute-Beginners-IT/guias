@@ -1,0 +1,22 @@
+id: lag-create
+title: Crear una agregación de enlaces (LAG con LACP)
+group: vlans-ports
+order: 4
+summary: Une dos puertos libres en un solo enlace lógico hacia otro switch o un servidor, con negociación LACP.
+explanation: >-
+  Una agregación de enlaces (LAG, port-channel o bonding según la marca) hace que
+  varios puertos físicos se comporten como un único enlace: suma capacidad y, si un
+  cable falla, el tráfico sigue por los demás. LACP es el protocolo con el que los
+  dos extremos negocian qué puertos forman el grupo y detectan fallos. No hace que
+  una conexión individual vaya más rápido: reparte las conexiones entre los enlaces.
+  Las VLAN se configuran sobre la interfaz lógica, no sobre cada puerto.
+risks:
+  - Si los dos cables están conectados y un extremo no tiene la agregación configurada, se forma un bucle de capa 2 que puede tumbar toda la red.
+  - Al meter un puerto en una agregación, su configuración anterior se pierde o deja de aplicarse; si el puerto estaba en uso, se corta.
+  - Los dos extremos tienen que coincidir en modo (LACP en ambos), velocidad de los puertos y VLAN.
+  - Deshacer una agregación devuelve los puertos a su estado suelto; con los cables puestos, eso también puede crear un bucle.
+prerequisites:
+  - Los puertos elegidos están libres, sin equipos conectados, y son de la misma velocidad.
+  - El otro extremo se va a configurar también con LACP, y quien lo administra está coordinado.
+  - Conectar los cables solo cuando los dos extremos estén configurados, o mantener los puertos apagados hasta entonces.
+  - Tener acceso por consola y una copia de la configuración hecha antes de empezar.

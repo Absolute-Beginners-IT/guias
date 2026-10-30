@@ -1,0 +1,43 @@
+platform: mikrotik-routeros
+task: lldp-neighbors
+summary: >-
+  Muestra qué equipo hay al otro lado de cada puerto de un MikroTik con RouterOS,
+  usando el descubrimiento de vecinos, que incluye LLDP.
+risk:
+  level: low
+  reason: Consultar vecinos no cambia nada.
+params: []
+preflight:
+  - text: >-
+      De fábrica RouterOS descubre vecinos por CDP, LLDP y su propio protocolo MNDP,
+      en las interfaces de la lista static. Esta guía solo consulta.
+steps:
+  - title: Ver los vecinos
+    commands:
+      - /ip neighbor print
+    explanation: >-
+      Lista los equipos vecinos descubiertos en cada interfaz, con su nombre,
+      dirección y plataforma.
+verification:
+  - command: /ip neighbor print
+    expect: >-
+      Aparecen los switches, teléfonos y puntos de acceso conectados. Si la lista
+      está vacía, revisa la lista de interfaces de /ip neighbor discovery-settings.
+rollback:
+  summary: Consultar no cambia nada y no requiere vuelta atrás.
+  steps:
+    - title: Nada que deshacer
+      manual: true
+      explanation: Esta guía no modifica la configuración.
+  lockoutRecovery: Esta guía no afecta al acceso de gestión.
+sources:
+  - title: RouterOS — Neighbor discovery
+    url: https://help.mikrotik.com/docs/display/ROS/Neighbor+discovery
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: RouterOS 7
+  notes: >-
+    El comando de consulta y los valores de fábrica están contrastados con la
+    documentación oficial. Cambiar en qué interfaces se anuncia el equipo queda
+    fuera de esta guía. Falta probarla en un equipo real.

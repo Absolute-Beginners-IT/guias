@@ -1,0 +1,78 @@
+platform: ruijie-reyee
+task: poe-port
+summary: >-
+  Reinicia el equipo alimentado por un puerto PoE de un Ruijie NBS3200 con el botón
+  Repower y fija la prioridad PoE del puerto, desde la interfaz web.
+risk:
+  level: medium
+  reason: El equipo conectado al puerto se apaga un momento; el resto del switch no se ve afectado.
+params:
+  - id: port
+    label: Puerto
+    type: text
+    example: Gi12
+    pattern: '^[A-Za-z]{2}\d{1,2}$'
+    patternHint: Nombre del puerto tal como aparece en el panel.
+  - id: priority
+    label: Prioridad PoE que debe quedar
+    type: choice
+    example: Low
+    options:
+      - Low
+      - Medium
+      - High
+    help: Cuando falta potencia, los puertos de prioridad más baja se apagan primero.
+  - id: previousPriority
+    label: Prioridad PoE que tiene ahora
+    type: choice
+    example: Low
+    options:
+      - Low
+      - Medium
+      - High
+preflight:
+  - text: >-
+      En Local Device > Ports > PoE > PoE Overview, mira la potencia disponible; si
+      queda poca, el equipo puede no volver a encender.
+  - text: >-
+      En Local Device > Ports > PoE > Port List, mira el estado y la prioridad de
+      {{port}}. Si la alimentación del puerto está desactivada a propósito, detente.
+  - text: Confirma qué equipo hay en {{port}} y avisa a quien lo use.
+steps:
+  - title: Reiniciar el equipo conectado
+    manual: true
+    explanation: >-
+      En Port List, pulsa Repower en la fila de {{port}}. El puerto corta la
+      alimentación un momento y la devuelve, y el equipo conectado arranca de nuevo.
+    warning: El equipo se apaga al pulsar Repower.
+  - title: Fijar la prioridad
+    manual: true
+    explanation: >-
+      Pulsa Edit en la fila de {{port}}, elige la prioridad {{priority}} y pulsa OK.
+      Para varios puertos a la vez está Batch Edit.
+verification:
+  - expect: >-
+      En Port List, {{port}} vuelve a entregar potencia cuando el equipo termina de
+      arrancar y muestra la prioridad {{priority}}.
+rollback:
+  summary: El reinicio no se deshace; la prioridad sí vuelve a su valor anterior.
+  steps:
+    - title: Volver a la prioridad anterior
+      manual: true
+      explanation: En Port List, pulsa Edit en {{port}}, elige {{previousPriority}} y pulsa OK.
+  lockoutRecovery: >-
+    No afecta al acceso de gestión, salvo que el equipo alimentado sea parte de tu
+    camino hasta el switch, por ejemplo un punto de acceso. En ese caso hazlo desde
+    una conexión cableada.
+sources:
+  - title: Ruijie Reyee NBS3200 V2 — ReyeeOS 2.341 Configuration Guide, apartado PoE Configuration
+    url: https://reyee.ruijie.com/en-global/support/documents/slide_rg-nbs3200-24gt4xs-p-v2-nbs3200-48gt4xs-p-v2-switches-implementation-cookbook/
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: ReyeeOS 2.341
+  notes: >-
+    Pasos contrastados con la guía oficial, que documenta el botón Repower para
+    reiniciar el equipo conectado. La guía escribe la ruta de la lista de puertos
+    PoE de dos formas, con y sin Ports; si no la encuentras, búscala dentro de PoE.
+    Falta probarla en un NBS3200 real.

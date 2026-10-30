@@ -1,0 +1,21 @@
+id: port-security
+title: Limitar los equipos de un puerto (port security)
+group: security-resilience
+order: 3
+summary: >-
+  Limita cuántas direcciones MAC puede aprender un puerto de acceso, para que no se
+  pueda colgar un switch o un punto de acceso no autorizado.
+explanation: >-
+  Cada equipo tiene una dirección MAC y el switch aprende en qué puerto está cada
+  una. Port security fija un máximo de direcciones por puerto: si aparece una de más,
+  el switch descarta su tráfico o apaga el puerto, según la acción elegida. Sirve para
+  que en una toma de la pared solo funcione el equipo previsto, o el teléfono y el
+  ordenador conectado detrás. No sustituye a una autenticación como 802.1X, porque
+  una MAC se puede falsificar.
+risks:
+  - Un máximo demasiado bajo deja sin red a equipos legítimos, por ejemplo el ordenador conectado detrás de un teléfono IP o una máquina virtual con su propia MAC.
+  - Si la acción es apagar el puerto, hay que reactivarlo a mano o esperar a que se recupere solo, según la marca.
+  - Aplicarlo en un enlace a otro switch o a un punto de acceso corta a todos los equipos que hay detrás.
+prerequisites:
+  - Saber cuántos equipos hay detrás del puerto, contando teléfonos IP y máquinas virtuales.
+  - Aplicarlo solo en puertos de acceso, nunca en enlaces entre switches.

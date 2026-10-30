@@ -1,0 +1,20 @@
+id: poe-port
+title: Reiniciar un dispositivo PoE y fijar su prioridad
+group: vlans-ports
+order: 5
+summary: Corta y devuelve la alimentación PoE de un puerto para reiniciar el equipo conectado, y define su prioridad de alimentación.
+explanation: >-
+  PoE (Power over Ethernet) alimenta por el mismo cable de red a teléfonos, cámaras
+  y puntos de acceso. El switch tiene un presupuesto total de potencia; cuando no
+  alcanza para todos, la prioridad de cada puerto decide a cuáles se les corta
+  primero. Quitar y volver a dar la alimentación de un puerto es la forma de
+  reiniciar a distancia un equipo que se quedó colgado.
+risks:
+  - El equipo conectado se apaga en el momento y tarda en volver a estar operativo; un punto de acceso deja sin red a sus clientes mientras arranca.
+  - Equivocarse de puerto apaga otro equipo, por ejemplo una cámara o un teléfono en uso.
+  - Dar prioridad alta a muchos puertos anula el efecto de la prioridad cuando falta potencia.
+  - Si el presupuesto de potencia está agotado, el equipo puede no volver a encender después del corte.
+prerequisites:
+  - Saber con certeza qué equipo está conectado al puerto.
+  - Haber avisado a quien use ese equipo.
+  - El switch es un modelo con PoE.

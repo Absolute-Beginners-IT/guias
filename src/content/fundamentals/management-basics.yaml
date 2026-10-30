@@ -1,0 +1,53 @@
+id: management-basics
+title: Cómo se gestiona un switch
+order: 4
+summary: >-
+  Las formas de entrar a un switch, la diferencia entre la configuración en ejecución y
+  la guardada, y por qué conviene tener siempre una copia a mano.
+sections:
+  - heading: Las formas de entrar
+    paragraphs:
+      - >-
+        Por consola: un cable al puerto de consola del switch (serie o USB) y un
+        programa de terminal como PuTTY. Funciona aunque la red esté caída o el switch no
+        tenga IP, por eso es el último recurso cuando algo sale mal.
+      - >-
+        Por SSH: una sesión de texto cifrada a la IP de gestión del switch. Es la forma
+        habitual de trabajar con la línea de comandos. Telnet hace lo mismo sin cifrar y
+        conviene tenerlo apagado.
+      - >-
+        Por la web: la interfaz gráfica del switch en el navegador, mejor por HTTPS. Es
+        la única forma de gestionar algunos equipos, como el Ruijie de este manual, y
+        en los demás convive con la línea de comandos.
+      - >-
+        Por una plataforma en la nube o un controlador, como Aruba Central, Ruijie Cloud
+        o el sistema de monitorización que use la empresa. Cómodo para muchos equipos,
+        pero conviene saber trabajar también directamente con cada switch.
+  - heading: Configuración en ejecución y configuración guardada
+    paragraphs:
+      - >-
+        La mayoría de switches distinguen la configuración en ejecución (running), la
+        que está funcionando ahora, de la guardada (startup), la que carga al arrancar.
+        Un cambio aplicado y no guardado funciona hasta el siguiente reinicio; después
+        se pierde.
+      - >-
+        Esto tiene una ventaja: si un cambio sin guardar te deja sin acceso, un reinicio
+        devuelve el switch a la configuración anterior. Algunos sistemas lo
+        aprovechan con redes de seguridad automáticas, como el checkpoint auto de
+        Aruba, el reload in de Cisco o el Safe Mode de MikroTik. Cada marca guarda de
+        forma distinta, y la ficha de cada equipo explica cómo.
+  - heading: Copias de la configuración
+    paragraphs:
+      - >-
+        Antes de cualquier cambio importante, guarda una copia de la configuración fuera
+        del switch. Es la única forma segura de volver a un estado conocido si algo
+        sale mal, y la que permite reemplazar un switch averiado en minutos.
+    points:
+      - Guárdala con el nombre del switch y la fecha.
+      - Comprueba que el archivo se puede abrir y no está vacío.
+      - Las copias contienen información sensible; guárdalas en un sitio protegido.
+related:
+  - config-backup
+  - config-restore
+  - ssh-access
+  - user-admin

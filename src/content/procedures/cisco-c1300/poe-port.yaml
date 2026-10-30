@@ -1,0 +1,139 @@
+platform: cisco-c1300
+task: poe-port
+summary: >-
+  Corta y restablece la alimentación PoE de un puerto de un Cisco Catalyst 1300 con
+  PoE para reiniciar el equipo conectado, y fija la prioridad PoE del puerto.
+risk:
+  level: medium
+  reason: >-
+    El equipo conectado al puerto se apaga en el momento. No afecta al resto del
+    switch ni a los datos de otros puertos.
+params:
+  - id: interfaceId
+    label: Puerto
+    type: text
+    example: gi1/0/12
+    pattern: '^(gi|te|tw|fi)\d+/0/\d+$'
+    patternHint: Tipo y número en formato unidad/0/puerto, por ejemplo gi1/0/12.
+  - id: priority
+    label: Prioridad PoE que debe quedar
+    type: choice
+    example: low
+    options:
+      - low
+      - high
+      - critical
+    help: La de fábrica es low. Reserva critical para lo que no puede apagarse, como un punto de acceso principal.
+  - id: previousPriority
+    label: Prioridad PoE que tiene ahora
+    type: choice
+    example: low
+    options:
+      - low
+      - high
+      - critical
+    help: La ves en la comprobación previa; hace falta para poder volver atrás.
+preflight:
+  - text: >-
+      Mira el estado PoE del puerto: estado administrativo y operativo, potencia,
+      clase y prioridad. Anota la prioridad actual. Si el estado administrativo es
+      never, detente: ese puerto tiene PoE desactivado a propósito y esta guía lo
+      dejaría entregando potencia.
+    command: show power inline {{interfaceId}}
+  - text: Comprueba la potencia asignada del switch; si queda poca, el equipo puede no volver a encender.
+    command: show power inline
+  - text: Confirma qué equipo está en ese puerto y avisa a quien lo use.
+steps:
+  - title: Entrar en la configuración del puerto
+    commands:
+      - configure terminal
+      - interface {{interfaceId}}
+    explanation: Pasa a configuración global y entra en el puerto. El prompt termina en (config-if)#.
+  - title: Cortar la alimentación PoE
+    commands:
+      - power inline never
+    explanation: >-
+      Desactiva la detección de dispositivos y deja de entregar potencia en el
+      puerto. El equipo conectado se apaga.
+    warning: El equipo se apaga al ejecutar este comando.
+  - title: Esperar unos segundos
+    manual: true
+    explanation: Espera unos 10 segundos para que el equipo se descargue por completo antes de volver a alimentarlo.
+  - title: Restablecer la alimentación PoE
+    commands:
+      - power inline auto
+    explanation: >-
+      Vuelve a activar la detección y la entrega de potencia; es el modo de fábrica.
+      El equipo arranca de nuevo.
+  - title: Fijar la prioridad
+    commands:
+      - power inline priority {{priority}}
+    explanation: >-
+      Define qué prioridad tiene el puerto cuando el switch no tiene potencia para
+      todos: los puertos de prioridad más baja son los primeros en quedarse sin
+      alimentación.
+    breakdown:
+      - token: power inline priority
+        meaning: Fija la prioridad PoE del puerto.
+      - token: '{{priority}}'
+        meaning: critical es la más alta, después high y low. El valor de fábrica es low.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve a Privileged EXEC.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: >-
+      Copia la configuración en ejecución a la de arranque, para que la prioridad
+      sobreviva a un reinicio. El switch pide confirmación.
+    warning: Verifica primero (sección siguiente) y guarda después.
+verification:
+  - command: show power inline {{interfaceId}}
+    expect: >-
+      Estado administrativo auto, estado operativo encendido cuando el equipo
+      termina de arrancar, potencia mayor que cero y prioridad {{priority}}.
+  - command: show interfaces status {{interfaceId}}
+    expect: El puerto vuelve a tener enlace cuando el equipo termina de arrancar.
+rollback:
+  summary: >-
+    El corte de alimentación no se puede deshacer, solo restablecer. La prioridad sí
+    vuelve a su valor anterior.
+  steps:
+    - title: Asegurar que el puerto vuelve a entregar potencia
+      commands:
+        - configure terminal
+        - interface {{interfaceId}}
+        - power inline auto
+        - end
+      explanation: Reactiva PoE en el puerto por si quedó desactivado a mitad del procedimiento.
+    - title: Volver a la prioridad anterior
+      commands:
+        - configure terminal
+        - interface {{interfaceId}}
+        - power inline priority {{previousPriority}}
+        - end
+      explanation: Devuelve al puerto la prioridad {{previousPriority}}.
+    - title: Si ya habías guardado con write memory
+      commands:
+        - write memory
+      explanation: Guarda de nuevo para que la configuración de arranque también quede como antes.
+  lockoutRecovery: >-
+    Este cambio no afecta al acceso de gestión del switch, salvo que el equipo
+    alimentado por ese puerto sea parte de tu camino hasta él (por ejemplo un punto
+    de acceso o un conversor). En ese caso hazlo desde una conexión cableada.
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — PoE Commands
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/poe-commands.html
+  - title: Cisco Catalyst 1300 CLI Guide — Ethernet Configuration Commands (show interfaces status)
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/ethernet-configuration-commands.html
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: >-
+    Los comandos están contrastados con la guía oficial de la CLI, que no tiene un
+    comando propio para reiniciar un puerto PoE. Usar power inline never seguido de
+    power inline auto es una secuencia deducida de lo que hace cada comando, y el
+    tiempo de espera es orientativo. Si el puerto tenía un time-range asociado a
+    power inline auto, esta guía no lo conserva. Falta probarla en un C1300 con PoE.

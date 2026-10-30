@@ -1,0 +1,80 @@
+platform: cisco-c1300
+task: syslog-remote
+summary: >-
+  Envía los registros de un Cisco Catalyst 1300 a un servidor syslog por UDP 514,
+  desde el nivel de severidad elegido.
+risk:
+  level: low
+  reason: Enviar registros no afecta al tráfico ni al acceso de gestión.
+params:
+  - id: serverIp
+    label: IP del servidor syslog
+    type: ipv4
+    example: 192.168.10.30
+  - id: severity
+    label: Severidad mínima
+    type: choice
+    example: informational
+    options:
+      - informational
+      - notifications
+      - warnings
+      - errors
+    help: informational es el valor de fábrica y lo habitual. Cuanto más alto el nivel, menos mensajes.
+preflight:
+  - text: Comprueba que la hora está sincronizada; si no, los registros llegan con la hora mal.
+    command: show clock
+  - text: Comprueba que el registro está activo; la primera línea tiene que decir Logging is enabled.
+    command: show logging
+steps:
+  - title: Entrar en modo configuración
+    commands:
+      - configure terminal
+    explanation: Pasa de Privileged EXEC a configuración global. El prompt termina en (config)#.
+  - title: Definir el servidor syslog
+    commands:
+      - logging host {{serverIp}} severity {{severity}}
+    explanation: >-
+      Envía al servidor {{serverIp}} los mensajes de severidad {{severity}} o más
+      grave, por UDP 514 y con facility local7, los valores de fábrica.
+    breakdown:
+      - token: logging host {{serverIp}}
+        meaning: Servidor syslog remoto. Admite también port, facility y description.
+      - token: severity {{severity}}
+        meaning: Nivel mínimo de los mensajes que se envían.
+  - title: Salir y guardar
+    commands:
+      - end
+      - write memory
+    explanation: Vuelve a Privileged EXEC y guarda; el switch pide confirmación.
+  - title: Comprobar la llegada en el servidor
+    manual: true
+    explanation: >-
+      Provoca un mensaje inofensivo, por ejemplo entrando y saliendo de configure
+      terminal, y búscalo en el servidor syslog filtrando por la IP del switch.
+verification:
+  - command: show running-config
+    expect: Aparece la línea logging host {{serverIp}} con la severidad elegida.
+rollback:
+  summary: Quita el servidor syslog añadido.
+  steps:
+    - title: Dejar de enviar registros a ese servidor
+      commands:
+        - configure terminal
+        - no logging host {{serverIp}}
+        - end
+        - write memory
+      explanation: Elimina el reenvío al servidor {{serverIp}}.
+  lockoutRecovery: Este cambio no afecta al acceso de gestión.
+sources:
+  - title: Cisco Catalyst 1300 CLI Guide — SYSLOG Commands
+    url: https://www.cisco.com/c/en/us/td/docs/switches/campus-lan-switches-access/Catalyst-1200-and-1300-Switches/cli/C1300-cli/syslog-commands.html
+status:
+  level: docs-checked
+  reviewed: '2026-10-14'
+  firmware: CLI Guide Catalyst 1300, edición 2026-04-28
+  notes: >-
+    Sintaxis y valores de fábrica contrastados con la guía oficial de la CLI. Los
+    nombres de severidad se tomaron de la lista de logging buffered; confirma que
+    logging host los acepta con logging host {{serverIp}} severity ?. Falta probarla
+    en un C1300 real.

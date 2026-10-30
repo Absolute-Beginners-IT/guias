@@ -1,0 +1,130 @@
+platform: aruba-aoscx
+task: port-access
+summary: >-
+  Configura un puerto de un Aruba CX 6100 como puerto de acceso de una VLAN y guarda
+  el cambio.
+risk:
+  level: medium
+  reason: >-
+    El equipo conectado al puerto cambia de red en el momento. Si el puerto es el que
+    usas para gestionar el switch o es un enlace a otro switch, el cambio corta ese
+    acceso.
+params:
+  - id: interfaceId
+    label: Puerto
+    type: text
+    example: 1/1/5
+    pattern: '^\d+/\d+/\d+$'
+    patternHint: Formato miembro/slot/puerto, por ejemplo 1/1/5.
+  - id: vlanId
+    label: VLAN de destino
+    type: vlan-id
+    example: '20'
+    help: Tiene que existir ya en el switch.
+  - id: previousVlanId
+    label: VLAN que tiene ahora el puerto
+    type: vlan-id
+    example: '1'
+    help: La ves en la comprobación previa; hace falta para poder volver atrás.
+  - id: checkpointName
+    label: Nombre del checkpoint de respaldo
+    type: text
+    example: antes-puerto-1-1-5
+    pattern: '^(?!CPC)[A-Za-z0-9_-]{1,32}$'
+    patternHint: De 1 a 32 caracteres; letras, números, guion y guion bajo; no puede empezar por CPC.
+preflight:
+  - text: Confirma que la VLAN de destino existe.
+    command: show vlan {{vlanId}}
+  - text: >-
+      Mira cómo está el puerto ahora y anota su VLAN. Si aparece en modo trunk o con
+      varias VLAN, detente: esta guía lo convertiría en puerto de acceso.
+    command: show vlan port {{interfaceId}}
+  - text: >-
+      Comprueba que no es el puerto por el que estás conectado ni un enlace hacia
+      otro switch.
+    command: show interface {{interfaceId}}
+  - text: Guarda un checkpoint con la configuración actual.
+    command: copy running-config checkpoint {{checkpointName}}
+steps:
+  - title: Entrar en la configuración del puerto
+    commands:
+      - config
+      - interface {{interfaceId}}
+    explanation: >-
+      Pasa a configuración global y entra en el contexto del puerto. El prompt
+      queda en switch(config-if)#.
+  - title: Asignar la VLAN de acceso
+    commands:
+      - vlan access {{vlanId}}
+    explanation: >-
+      Convierte el puerto en puerto de acceso y lo asigna a la VLAN {{vlanId}}. Un
+      puerto de acceso solo puede tener una VLAN. El cambio se aplica en el momento.
+    warning: El equipo conectado cambia de red al ejecutar este comando.
+    breakdown:
+      - token: vlan access
+        meaning: Define el puerto como puerto de acceso.
+      - token: '{{vlanId}}'
+        meaning: VLAN a la que pertenece el puerto; el tráfico sale sin etiqueta.
+  - title: Asegurar que el puerto está habilitado
+    commands:
+      - no shutdown
+    explanation: Habilita el puerto. Si ya lo estaba, no cambia nada.
+  - title: Salir del modo configuración
+    commands:
+      - end
+    explanation: Vuelve al modo Manager.
+  - title: Guardar el cambio
+    commands:
+      - write memory
+    explanation: Copia la configuración en ejecución a la de arranque.
+    warning: Verifica primero (sección siguiente) y guarda después.
+verification:
+  - command: show vlan port {{interfaceId}}
+    expect: Una sola fila con la VLAN {{vlanId}} en modo access.
+  - command: show interface {{interfaceId}}
+    expect: >-
+      Aparecen las líneas VLAN Mode: access y Access VLAN: {{vlanId}}, y el puerto
+      está up si hay un equipo conectado.
+rollback:
+  summary: >-
+    Devuelve el puerto a la VLAN que tenía. Si el puerto era otra cosa que un acceso
+    simple, vuelve al checkpoint.
+  steps:
+    - title: Volver a la VLAN anterior
+      commands:
+        - config
+        - interface {{interfaceId}}
+        - vlan access {{previousVlanId}}
+        - end
+      explanation: Asigna de nuevo el puerto a la VLAN {{previousVlanId}}.
+    - title: Volver al estado anterior completo
+      commands:
+        - checkpoint rollback {{checkpointName}}
+      explanation: Aplica el checkpoint guardado antes de empezar. Deshace todos los cambios posteriores.
+    - title: Si ya habías guardado con write memory
+      commands:
+        - write memory
+      explanation: Guarda de nuevo para que la configuración de arranque también quede como antes.
+  lockoutRecovery: >-
+    Si el puerto era tu vía de gestión y perdiste la conexión, entra por el puerto
+    de consola y aplica el checkpoint. Si todavía no habías ejecutado write memory,
+    un reinicio del switch también recupera la configuración anterior. Para hacer
+    este cambio en remoto con red de seguridad, activa antes checkpoint auto (ver la
+    ficha del equipo).
+sources:
+  - title: AOS-CX 10.15 Layer-2 Bridging Guide (4100i, 6000, 6100, 5420, 6200) — vlan access
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/l2_bridging_4100i-6000-6100-5420-6200/Content/Chp_vlans/vlan_cmds/vla-acc.htm
+  - title: AOS-CX 10.15 Layer-2 Bridging Guide — asignar una VLAN a un puerto de acceso
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/l2_bridging_4100i-6000-6100-5420-6200/Content/Chp_vlans/asi-vla-id-acc-int.htm
+  - title: AOS-CX 10.15 Layer-2 Bridging Guide — show vlan port
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/l2_bridging_4100i-6000-6100-5420-6200/Content/Chp_vlans/vlan_cmds/sho-vla-por.htm
+  - title: AOS-CX 10.15 Layer-2 Bridging Guide — escenario de VLAN
+    url: https://arubanetworking.hpe.com/techdocs/AOS-CX/10.15/HTML/l2_bridging_4100i-6000-6100-5420-6200/Content/Chp_vlans/vla-sce.htm
+status:
+  level: docs-checked
+  reviewed: '2026-10-13'
+  firmware: AOS-CX 10.15
+  notes: >-
+    Sintaxis contrastada con la documentación oficial. No se comprobó en la
+    documentación qué ocurre exactamente al aplicar vlan access sobre un puerto que
+    era trunk. Falta probar la guía en un 6100 real.
