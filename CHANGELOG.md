@@ -10,8 +10,9 @@ Todos los cambios relevantes de este proyecto se documentan aquí. El formato si
 
 - Aviso fijo en todas las páginas: el manual es un prototipo en desarrollo y no sustituye a la documentación oficial
   del fabricante ni a una prueba en laboratorio.
-- Enlace «← Volver a la web» en la cabecera cuando el manual se compila dentro de otra web (variable
-  `VITE_HOME_URL`). El archivo independiente no lo muestra.
+- Barra de navegación de la web que contiene el manual, cuando se compila dentro de ella (variable `VITE_SITE_NAV`, con
+  la lista de enlaces en JSON). Sustituye al enlace «← Volver a la web» y a la variable `VITE_HOME_URL`. El archivo
+  independiente no la muestra.
 
 ### Cambiado
 
