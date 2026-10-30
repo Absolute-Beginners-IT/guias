@@ -1,11 +1,12 @@
 :root {
   color-scheme: light dark;
-  --bg: #f1f5f9;
+  /* Same palette as the website the manual is published in; the orange is darkened to keep 4.5:1 contrast as text. */
+  --bg: #f6f7f9;
   --surface: #ffffff;
-  --text: #0f172a;
-  --muted: #5b6577;
-  --border: #e2e8f0;
-  --accent: #4f46e5;
+  --text: #16202e;
+  --muted: #5b6676;
+  --border: #d9dee6;
+  --accent: #c2410c;
   --code-bg: #0f172a;
   --code-text: #e6edf7;
   --ok: #1b7a43;
@@ -26,12 +27,12 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0b1120;
-  --surface: #131c2e;
-  --text: #e2e8f0;
-  --muted: #94a3b8;
-  --border: #243049;
-  --accent: #818cf8;
+  --bg: #0f141b;
+  --surface: #171e28;
+  --text: #e6ebf2;
+  --muted: #9aa6b6;
+  --border: #2b3542;
+  --accent: #fb923c;
   --code-bg: #070b14;
   --ok: #6fd69a;
   --ok-bg: #143523;
@@ -45,12 +46,12 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0b1120;
-    --surface: #131c2e;
-    --text: #e2e8f0;
-    --muted: #94a3b8;
-    --border: #243049;
-    --accent: #818cf8;
+    --bg: #0f141b;
+    --surface: #171e28;
+    --text: #e6ebf2;
+    --muted: #9aa6b6;
+    --border: #2b3542;
+    --accent: #fb923c;
     --code-bg: #070b14;
     --ok: #6fd69a;
     --ok-bg: #143523;
@@ -73,7 +74,9 @@ body {
   color: var(--text);
   font:
     16px / 1.55 system-ui,
+    -apple-system,
     "Segoe UI",
+    Roboto,
     sans-serif;
 }
 
@@ -126,6 +129,13 @@ p {
   padding: 0 1rem;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
+}
+
+.shell__home {
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
 .shell__title {

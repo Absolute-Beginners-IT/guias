@@ -59,6 +59,9 @@ export function AppShell({ catalog, route, activePlatform, recents, children }: 
     searchButton.current?.focus()
   }
 
+  // Set only when the manual is built inside a larger website; the standalone file has no "home" to go back to.
+  const homeUrl = import.meta.env.VITE_HOME_URL
+
   return (
     <div className="shell">
       {/* A button, not an anchor: the hash is the route, so "#content" would navigate away. */}
@@ -67,6 +70,11 @@ export function AppShell({ catalog, route, activePlatform, recents, children }: 
       </button>
       <PrototypeNotice />
       <header className="shell__header">
+        {homeUrl && (
+          <a className="shell__home" href={homeUrl}>
+            ← Volver a la web
+          </a>
+        )}
         <a className="shell__title" href="#/">
           Manual de Switching
         </a>
