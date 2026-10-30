@@ -74,9 +74,10 @@ npm run format     # aplica el formato y los arreglos automáticos del lint
 npm run build      # genera dist/index.html
 ```
 
-Si el manual se publica dentro de otra web, compílalo con `VITE_HOME_URL` (por ejemplo, `VITE_HOME_URL=../../ npm run
-build`): la cabecera muestra entonces un enlace «← Volver a la web» a esa dirección. Sin la variable, el archivo
-independiente no lo muestra.
+Si el manual se publica dentro de otra web, compílalo con `VITE_SITE_NAV`, una lista JSON con la navegación de esa web
+(`[{"label": "Inicio", "href": "../../"}, {"label": "Guías", "href": "./", "current": true}, …]`): aparece entonces
+una barra con esos enlaces encima de la cabecera. Sin la variable, o si no es una lista válida, el archivo independiente
+no la muestra.
 
 Cada pull request a `main` pasa por el CI de GitHub Actions: `check`, `typecheck`, `test` y `build`. Al crear una
 etiqueta `vX.Y.Z`, el workflow de release publica el HTML en GitHub.

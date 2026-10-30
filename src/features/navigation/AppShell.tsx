@@ -6,6 +6,7 @@ import { FundamentalsNav } from '../fundamentals/FundamentalsNav'
 import { AppFooter } from './AppFooter'
 import { CommandPalette } from './CommandPalette'
 import { PlatformTabs } from './PlatformTabs'
+import { readSiteNav, SiteNav } from './SiteNav'
 import { buildSearchIndex, type RunbookHit, runbookSearchHit } from './searchIndex'
 import { TaskNav } from './TaskNav'
 import { ThemeToggle } from './ThemeToggle'
@@ -59,8 +60,8 @@ export function AppShell({ catalog, route, activePlatform, recents, children }: 
     searchButton.current?.focus()
   }
 
-  // Set only when the manual is built inside a larger website; the standalone file has no "home" to go back to.
-  const homeUrl = import.meta.env.VITE_HOME_URL
+  // Set only when the manual is built inside a larger website; the standalone file has no site to navigate.
+  const siteLinks = readSiteNav(import.meta.env.VITE_SITE_NAV)
 
   return (
     <div className="shell">
@@ -69,12 +70,8 @@ export function AppShell({ catalog, route, activePlatform, recents, children }: 
         Saltar al contenido
       </button>
       <PrototypeNotice />
+      {siteLinks.length > 0 && <SiteNav links={siteLinks} />}
       <header className="shell__header">
-        {homeUrl && (
-          <a className="shell__home" href={homeUrl}>
-            ← Volver a la web
-          </a>
-        )}
         <a className="shell__title" href="#/">
           Manual de Switching
         </a>
