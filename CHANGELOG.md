@@ -6,6 +6,11 @@ Todos los cambios relevantes de este proyecto se documentan aquí. El formato si
 
 ## [Sin publicar]
 
+### Añadido
+
+- Aviso fijo en todas las páginas: el manual es un prototipo en desarrollo y no sustituye a la documentación oficial
+  del fabricante ni a una prueba en laboratorio.
+
 ### Cambiado
 
 - La guía de SNMP del Cisco Catalyst 1300 pasa de una comunidad v2c a SNMPv3: Engine ID, grupo con autenticación y
