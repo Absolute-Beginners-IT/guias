@@ -18,6 +18,16 @@ beforeEach(() => {
 })
 
 describe('App', () => {
+  it('says on every page that the manual is a prototype', () => {
+    for (const hash of ['', '#/plan', '#/status', '#/f']) {
+      const { unmount } = openAt(hash)
+      expect(screen.getByRole('note', { name: 'Aviso de prototipo' })).toHaveTextContent(
+        'Prototipo en desarrollo: el contenido se está revisando y no sustituye a la documentación oficial del fabricante ni a una prueba en laboratorio.',
+      )
+      unmount()
+    }
+  })
+
   it('shows the manual title and one tab per brand', () => {
     render(<App />)
 

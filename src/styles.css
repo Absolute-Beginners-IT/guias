@@ -106,6 +106,15 @@ p {
   min-height: 100vh;
 }
 
+.prototype-notice {
+  margin: 0;
+  padding: 0.45rem 1rem;
+  font-size: 0.85rem;
+  color: var(--warn);
+  background: var(--warn-bg);
+  text-align: center;
+}
+
 .shell__header {
   position: sticky;
   top: 0;

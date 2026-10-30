@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { Catalog } from '../../domain/buildCatalog'
 import { fundamentalsHref, planHref, type Route } from '../../lib/useHashRoute'
+import { PrototypeNotice } from '../../ui/PrototypeNotice'
 import { FundamentalsNav } from '../fundamentals/FundamentalsNav'
 import { AppFooter } from './AppFooter'
 import { CommandPalette } from './CommandPalette'
@@ -64,6 +65,7 @@ export function AppShell({ catalog, route, activePlatform, recents, children }: 
       <button type="button" className="skip-link" onClick={() => mainContent.current?.focus()}>
         Saltar al contenido
       </button>
+      <PrototypeNotice />
       <header className="shell__header">
         <a className="shell__title" href="#/">
           Manual de Switching
