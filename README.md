@@ -76,8 +76,8 @@ npm run build      # genera dist/index.html
 
 Si el manual se publica dentro de otra web, compílalo con `VITE_SITE_NAV`, una lista JSON con la navegación de esa web
 (`[{"label": "Inicio", "href": "../../"}, {"label": "Guías", "href": "./", "current": true}, …]`): aparece entonces
-una barra con esos enlaces encima de la cabecera. Sin la variable, o si no es una lista válida, el archivo independiente
-no la muestra.
+una barra con esos enlaces encima de la cabecera. El primer enlace tiene que ser la portada de esa web: el nombre de la
+barra apunta a él. Sin la variable, o si no es una lista válida, el archivo independiente no la muestra.
 
 Cada pull request a `main` pasa por el CI de GitHub Actions: `check`, `typecheck`, `test` y `build`. Al crear una
 etiqueta `vX.Y.Z`, el workflow de release publica el HTML en GitHub.

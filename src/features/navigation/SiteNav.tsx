@@ -19,7 +19,10 @@ export function readSiteNav(raw: string | undefined): SiteLink[] {
   }
 }
 
-/** Top bar of the website that embeds the manual; the standalone file is built without it. */
+/**
+ * Top bar of the website that embeds the manual; the standalone file is built without it.
+ * The first link is the website's home page: the brand on the left points to it.
+ */
 export function SiteNav({ links }: { links: SiteLink[] }) {
   return (
     <div className="site-bar">
