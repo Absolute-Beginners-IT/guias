@@ -131,11 +131,53 @@ p {
   background: var(--surface);
 }
 
-.shell__home {
+/* Bar of the website that embeds the manual (VITE_SITE_NAV): same look as the website's own top bar. */
+.site-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.site-bar__brand {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
   font-size: 0.9rem;
   font-weight: 600;
+  color: var(--text);
   text-decoration: none;
   white-space: nowrap;
+}
+
+.site-bar__brand span {
+  color: var(--accent);
+}
+
+.site-bar__nav {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0 auto;
+}
+
+.site-bar__nav a {
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.site-bar__nav a:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.site-bar__nav a[aria-current="page"] {
+  color: var(--surface);
+  background: var(--accent);
+  font-weight: 600;
 }
 
 .shell__title {

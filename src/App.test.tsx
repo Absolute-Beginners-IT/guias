@@ -28,24 +28,46 @@ describe('App', () => {
     }
   })
 
-  it('links back to the website that embeds the manual when it is built with VITE_HOME_URL', () => {
-    vi.stubEnv('VITE_HOME_URL', '../../')
+  it('shows the navigation of the website that embeds the manual when it is built with VITE_SITE_NAV', () => {
+    vi.stubEnv(
+      'VITE_SITE_NAV',
+      JSON.stringify([
+        { label: 'Inicio', href: '../../' },
+        { label: 'Mapa', href: '../#mapa' },
+        { label: 'Guías', href: './', current: true },
+      ]),
+    )
     try {
       render(<App />)
-      expect(screen.getByRole('link', { name: '← Volver a la web' })).toHaveAttribute('href', '../../')
+      const nav = within(screen.getByRole('navigation', { name: 'Secciones de la web' }))
+      expect(nav.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
+        ['Inicio', '../../'],
+        ['Mapa', '../#mapa'],
+        ['Guías', './'],
+      ])
+      expect(nav.getByRole('link', { name: 'Guías' })).toHaveAttribute('aria-current', 'page')
+      expect(nav.getByRole('link', { name: 'Inicio' })).not.toHaveAttribute('aria-current')
     } finally {
       vi.unstubAllEnvs()
     }
   })
 
-  it('shows no link back when built on its own', () => {
-    vi.stubEnv('VITE_HOME_URL', '')
-    try {
-      render(<App />)
-      expect(screen.queryByRole('link', { name: '← Volver a la web' })).not.toBeInTheDocument()
-    } finally {
-      vi.unstubAllEnvs()
+  it('ignores a VITE_SITE_NAV that is not a valid list of links', () => {
+    for (const value of ['not json', '{"label":"Inicio"}', '[{"label":"Inicio"}]']) {
+      vi.stubEnv('VITE_SITE_NAV', value)
+      try {
+        const { unmount } = render(<App />)
+        expect(screen.queryByRole('navigation', { name: 'Secciones de la web' }), value).not.toBeInTheDocument()
+        unmount()
+      } finally {
+        vi.unstubAllEnvs()
+      }
     }
+  })
+
+  it('shows no website navigation when built on its own', () => {
+    render(<App />)
+    expect(screen.queryByRole('navigation', { name: 'Secciones de la web' })).not.toBeInTheDocument()
   })
 
   it('shows the manual title and one tab per brand', () => {

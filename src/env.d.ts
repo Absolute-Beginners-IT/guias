@@ -4,6 +4,9 @@
 declare const __APP_VERSION__: string
 
 interface ImportMetaEnv {
-  /** Address of the website that embeds the manual; when empty, no "back to the website" link is shown. */
-  readonly VITE_HOME_URL?: string
+  /**
+   * Navigation of the website that embeds the manual, as JSON: [{ "label", "href", "current"? }, ...].
+   * When missing or invalid, no website bar is shown (the standalone file).
+   */
+  readonly VITE_SITE_NAV?: string
 }
