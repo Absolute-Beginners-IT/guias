@@ -1,3 +1,5 @@
+> **Repositorio archivado.** Las guías se desarrollan ahora en [Absolute-Beginners-IT/aprende](https://github.com/Absolute-Beginners-IT/aprende/tree/main/guias), en la carpeta `guias/`, que incluye todo lo de este repositorio y lo amplía (firewalls, integración con «Mi infraestructura»). Para usarlas sin conexión, compílalas allí con `npm run build` dentro de `guias/`. Motivo: [ADR 0005](https://github.com/Absolute-Beginners-IT/aprende/blob/main/docs/adr/0005-guias-fuente-unica-en-aprende.md).
+
 # Manual de Switching
 
 Guías interactivas para configurar switches de forma segura: eliges la marca y la tarea, escribes tus valores y
